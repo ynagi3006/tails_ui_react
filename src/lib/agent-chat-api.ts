@@ -57,6 +57,28 @@ export function extractAssistantText(data: unknown): string {
   return parts.join('\n\n').trim()
 }
 
+export type MetricAnalysisPayload = {
+  metric_name: string
+  value: string
+  record_dttm?: string
+  cell_text?: string
+  column_header?: string
+  row_context?: string
+  report_name?: string
+  detailed?: boolean
+  /** Column dates from the report table, used to infer cadence (daily/weekly). */
+  column_dates?: string[]
+  /** The metric's values from the row in the report, keyed by date. */
+  row_values?: Array<{ date: string; value: string }>
+}
+
+export async function postMetricAnalysis(payload: MetricAnalysisPayload): Promise<unknown> {
+  return apiFetchJson<unknown>('/responses/metric-analysis', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function extractToolCallLabels(data: unknown): string[] {
   const labels: string[] = []
   const d = data as {

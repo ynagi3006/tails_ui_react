@@ -204,18 +204,12 @@ export function AgentChatWidget() {
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             {!apiConfigured ? (
-              <p className="text-muted-foreground text-center text-xs leading-relaxed">
-                Set <code className="bg-muted rounded px-1 py-0.5 text-[0.65rem]">VITE_TAILS_API_URL</code> in{' '}
-                <code className="bg-muted rounded px-1 py-0.5 text-[0.65rem]">.env</code> to use the assistant.
-              </p>
+              <p className="text-muted-foreground text-center text-xs">Set API URL in <code className="text-[0.65rem]">.env</code>.</p>
             ) : null}
 
             {apiConfigured && messages.length === 0 && !loading ? (
               <div className="space-y-3">
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  Ask about metrics, datapoints, or reports in plain language. Dev identity headers are sent when
-                  configured.
-                </p>
+                <p className="text-muted-foreground text-xs">Ask in plain language.</p>
                 {suggestions.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
                     <span className="text-muted-foreground text-[0.65rem] font-medium tracking-wide uppercase">

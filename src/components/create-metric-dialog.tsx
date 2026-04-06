@@ -187,9 +187,7 @@ export function CreateMetricDialog({
         <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col">
           <DialogHeader className="border-border/60 space-y-1.5 border-b px-6 py-5 text-left">
             <DialogTitle className="text-lg font-semibold tracking-tight">New metric</DialogTitle>
-            <DialogDescription className="text-muted-foreground text-sm leading-relaxed">
-              Add a catalog entry. Snowflake SQL is checked on the server.
-            </DialogDescription>
+            <DialogDescription className="sr-only">Create a new metric.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-8 px-6 py-6">
@@ -314,10 +312,6 @@ export function CreateMetricDialog({
                 className="font-mono text-[0.8rem] leading-relaxed rounded-lg"
                 spellCheck={false}
               />
-              <p className="text-muted-foreground text-[0.7rem] leading-snug">
-                Must expose columns <code className="bg-muted/80 rounded px-1 py-0.5 text-[0.65rem]">record_dttm</code>{' '}
-                and <code className="bg-muted/80 rounded px-1 py-0.5 text-[0.65rem]">value</code>.
-              </p>
             </Section>
 
             <Section title="Tags" className="pb-0">

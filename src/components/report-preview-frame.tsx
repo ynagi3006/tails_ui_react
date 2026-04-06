@@ -1,8 +1,31 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 
+export type MetricClickRect = {
+  top: number
+  left: number
+  width: number
+  height: number
+}
+
+export type MetricClickPayload = {
+  metricName: string
+  value: string
+  columnHeader: string
+  rowContext: string
+  sectionHeader?: string
+  recordDttm?: string
+  /** Position of the clicked cell in parent viewport coordinates. */
+  viewportRect?: MetricClickRect
+  /** All date column headers from the table (e.g. ["2026-03-01","2026-03-08",...]) */
+  columnDates?: string[]
+  /** The metric's values from the clicked row, paired with column dates. */
+  rowValues?: Array<{ date: string; value: string }>
+}
+
 type Props = {
   src: string
   title: string
+  onMetricClick?: (payload: MetricClickPayload) => void
 }
 
 /**
@@ -10,7 +33,7 @@ type Props = {
  * Scrolling is on the outer div so wide reports get a horizontal scrollbar at the bottom of the
  * visible preview area.
  */
-export function ReportPreviewFrame({ src, title }: Props) {
+export function ReportPreviewFrame({ src, title, onMetricClick }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const scrollBoxRef = useRef<HTMLDivElement>(null)
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null)
@@ -99,6 +122,37 @@ export function ReportPreviewFrame({ src, title }: Props) {
       window.removeEventListener('resize', measure)
     }
   }, [measure])
+
+  useEffect(() => {
+    if (!onMetricClick) return
+    const handler = (e: MessageEvent) => {
+      if (!e.data || e.data.type !== 'tails:metric-click') return
+      const payload: MetricClickPayload = {
+        metricName: e.data.metricName ?? '',
+        value: e.data.value ?? '',
+        columnHeader: e.data.columnHeader ?? '',
+        rowContext: e.data.rowContext ?? '',
+        sectionHeader: e.data.sectionHeader,
+        recordDttm: e.data.recordDttm,
+        columnDates: Array.isArray(e.data.columnDates) ? e.data.columnDates : undefined,
+        rowValues: Array.isArray(e.data.rowValues) ? e.data.rowValues : undefined,
+      }
+      const cr = e.data.clickRect
+      const iframe = iframeRef.current
+      if (cr && iframe) {
+        const ir = iframe.getBoundingClientRect()
+        payload.viewportRect = {
+          top: ir.top + cr.top,
+          left: ir.left + cr.left,
+          width: cr.width,
+          height: cr.height,
+        }
+      }
+      onMetricClick(payload)
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [onMetricClick])
 
   const iframeStyle: CSSProperties = dims
     ? {

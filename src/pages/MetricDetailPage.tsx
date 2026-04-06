@@ -741,10 +741,6 @@ export function MetricDetailPage() {
             <Card className="border-border/70 rounded-2xl shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base">Edit definition</CardTitle>
-                <p className="text-muted-foreground text-sm">
-                  Updates the latest metric version in place when SQL is unchanged. Uses{' '}
-                  <code className="text-xs">PUT /api/v1/metrics/{'{id}'}</code>.
-                </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -812,10 +808,6 @@ export function MetricDetailPage() {
             <Card className="border-border/70 rounded-2xl shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base">Source SQL</CardTitle>
-                <p className="text-muted-foreground text-sm">
-                  Loaded from S3 via <code className="text-xs">GET /metrics/{'{id}'}/sql</code>. Saving uses{' '}
-                  <code className="text-xs">POST</code> and may create a new version when the query changes.
-                </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 {sqlLoading ? (
@@ -853,10 +845,6 @@ export function MetricDetailPage() {
               <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="text-base">Airflow run logs</CardTitle>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    Final DAG run status per collection for this metric version, from{' '}
-                    <code className="text-xs">GET /airflow/logs?metric_version_id=…</code>. One row per run.
-                  </p>
                 </div>
                 <Button
                   type="button"
@@ -887,10 +875,7 @@ export function MetricDetailPage() {
                     ))}
                   </div>
                 ) : airflowLogs.length === 0 ? (
-                  <p className="text-muted-foreground text-sm leading-relaxed">
-                    No Airflow log rows for this metric version yet. Logs appear after DAG runs report status into
-                    Snowflake.
-                  </p>
+                  <p className="text-muted-foreground text-sm">No Airflow runs logged yet.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-border/60">
                     <Table>
@@ -973,10 +958,7 @@ export function MetricDetailPage() {
                       <DatabaseIcon className="size-5 shrink-0 opacity-80" aria-hidden />
                       Recent datapoints
                     </DialogTitle>
-                    <DialogDescription>
-                      Up to {VIEWER_DATAPOINTS_LIMIT} newest rows for this version (
-                      <code className="text-xs">record_dttm</code> descending).
-                    </DialogDescription>
+                    <DialogDescription className="sr-only">Recent datapoints for this metric version.</DialogDescription>
                   </div>
                   <Button
                     type="button"

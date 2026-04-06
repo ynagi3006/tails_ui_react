@@ -90,7 +90,6 @@ export function ReportBuilderPage() {
     <div className="space-y-6">
       <PageHeader
         title="Report Builder"
-        description="Edit Jinja2 templates with the same Monaco editor as the classic UI, then render a live preview via the API."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <div className="border-border/60 bg-muted/30 flex rounded-full border p-0.5">

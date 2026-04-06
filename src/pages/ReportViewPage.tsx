@@ -23,7 +23,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import { ReportPreviewFrame } from '@/components/report-preview-frame'
+import { DetailedAnalysisCard, QuickAnalysisPopup } from '@/components/metric-analysis-panel'
+import { ReportPreviewFrame, type MetricClickPayload } from '@/components/report-preview-frame'
 import { apiFetchJson, getClassicUiReportUrl } from '@/lib/api'
 import { formatDate, formatDateOnly } from '@/lib/format-date'
 import { useTheme } from '@/hooks/use-theme'
@@ -108,6 +109,8 @@ export function ReportViewPage() {
   const [savingDetails, setSavingDetails] = useState(false)
 
   const [actionMsg, setActionMsg] = useState<{ text: string; error?: boolean } | null>(null)
+  const [quickTarget, setQuickTarget] = useState<MetricClickPayload | null>(null)
+  const [detailedTarget, setDetailedTarget] = useState<MetricClickPayload | null>(null)
   const prevReportVersionIdRef = useRef<string>('')
 
   const liveIframeUrl = useHtmlBlobUrl(rendered?.html, { theme: themeResolved })
@@ -358,6 +361,11 @@ export function ReportViewPage() {
       : ''
     : ''
 
+  const handleMetricClick = useCallback((payload: MetricClickPayload) => {
+    setQuickTarget(payload)
+    setDetailedTarget(null)
+  }, [])
+
   const activeIframeUrl = mode === 'live' ? liveIframeUrl : editionIframeUrl
   const previewLoading = mode === 'live' ? loadingLive : editionLoading
 
@@ -484,10 +492,6 @@ export function ReportViewPage() {
         <Card className="border-border/70 rounded-2xl shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Jinja2 template</CardTitle>
-            <p className="text-muted-foreground text-sm">
-              Same Monaco editor as Report Builder. Saves with{' '}
-              <code className="text-xs">PUT /reports/version/…/template</code> (this version only; no new report version).
-            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {!reportVersionId ? (
@@ -539,10 +543,6 @@ export function ReportViewPage() {
         <Card className="border-border/70 rounded-2xl shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Report metadata</CardTitle>
-            <p className="text-muted-foreground text-sm">
-              Updates the current report version in place via <code className="text-xs">PUT /reports/{'{id}'}</code>{' '}
-              (no template change).
-            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -669,10 +669,7 @@ export function ReportViewPage() {
                       ))}
                     </div>
                   ) : editions.length === 0 ? (
-                    <p className="text-muted-foreground p-4 text-sm leading-relaxed">
-                      No saved editions for this report yet. Editions appear after scheduled or manual publish jobs write
-                      HTML to storage.
-                    </p>
+                    <p className="text-muted-foreground p-4 text-sm">No editions yet.</p>
                   ) : (
                     <ul className="max-h-[min(60vh,560px)] overflow-y-auto p-2">
                       {editions.map((ed) => {
@@ -751,6 +748,12 @@ export function ReportViewPage() {
               )}
 
               <DataTableCard className="p-0">
+                {activeIframeUrl && !previewLoading && (
+                  <div className="flex items-center gap-1.5 border-b px-4 py-2 text-xs text-muted-foreground">
+                    <SparklesIcon className="size-3 text-indigo-400" />
+                    Click any metric name for an AI analysis
+                  </div>
+                )}
                 {previewLoading ? (
                   <Skeleton className="h-[min(52vh,560px)] w-full rounded-none rounded-b-2xl" />
                 ) : activeIframeUrl ? (
@@ -758,6 +761,7 @@ export function ReportViewPage() {
                     key={activeIframeUrl}
                     src={activeIframeUrl}
                     title={mode === 'live' ? 'Live rendered report' : 'Edition preview'}
+                    onMetricClick={handleMetricClick}
                   />
                 ) : mode === 'editions' && selectedEditionId ? (
                   <div className="text-muted-foreground flex h-[min(40vh,320px)] items-center justify-center px-6 text-sm">
@@ -769,10 +773,30 @@ export function ReportViewPage() {
                   </div>
                 )}
               </DataTableCard>
+
+              {detailedTarget && (
+                <DetailedAnalysisCard
+                  target={detailedTarget}
+                  reportName={reportName}
+                  onClose={() => setDetailedTarget(null)}
+                />
+              )}
             </div>
           </div>
         </>
       ) : null}
+
+      {quickTarget && (
+        <QuickAnalysisPopup
+          target={quickTarget}
+          reportName={reportName}
+          onClose={() => setQuickTarget(null)}
+          onDetailedClick={() => {
+            setDetailedTarget(quickTarget)
+            setQuickTarget(null)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ExternalLinkIcon, SearchIcon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
+import { CatalogLayoutToggle } from '@/components/catalog-layout-toggle'
 import { CreateMetricDialog } from '@/components/create-metric-dialog'
 import { DataTableCard } from '@/components/data-table-card'
 import { PageHeader } from '@/components/page-header'
@@ -9,6 +10,7 @@ import { PaginationBar } from '@/components/pagination-bar'
 import { ToolbarCard } from '@/components/toolbar-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -27,11 +29,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { apiFetchJson, getClassicUiMetricUrl, getClassicUiMetricsPageUrl } from '@/lib/api'
+import { apiFetchJson, getClassicUiMetricsPageUrl } from '@/lib/api'
 import { formatDate } from '@/lib/format-date'
+import { useCatalogLayout } from '@/hooks/use-catalog-layout'
 import { parseSearchInput } from '@/lib/parse-search'
 
 const PAGE_SIZE = 20
+const METRICS_LAYOUT_KEY = 'tails_catalog_metrics_layout'
 
 type MetricRow = {
   id: string
@@ -74,6 +78,8 @@ export function MetricsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasNext, setHasNext] = useState(false)
+
+  const [layout, setLayout] = useCatalogLayout(METRICS_LAYOUT_KEY)
 
   const classicMetrics = getClassicUiMetricsPageUrl()
 
@@ -146,7 +152,6 @@ export function MetricsPage() {
       <PageHeader
         eyebrow="Definitions"
         title="Metrics"
-        description="Inspect definitions and latest values. Create here or in the classic UI."
         actions={
           <div className="flex flex-wrap gap-2">
             <CreateMetricDialog
@@ -170,28 +175,31 @@ export function MetricsPage() {
       />
 
       <ToolbarCard>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-muted-foreground text-xs">Airflow</Label>
-            <Select
-              value={airflowFailedOnly ? 'failed' : 'all'}
-              onValueChange={(v) => {
-                setAirflowFailedOnly(v === 'failed')
-                setPage(1)
-              }}
-            >
-              <SelectTrigger size="sm" className="w-[180px] rounded-xl bg-background" aria-label="Filter by Airflow outcome">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                <SelectItem value="all">All metrics</SelectItem>
-                <SelectItem value="failed">Failed run only</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs">Airflow</Label>
+              <Select
+                value={airflowFailedOnly ? 'failed' : 'all'}
+                onValueChange={(v) => {
+                  setAirflowFailedOnly(v === 'failed')
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger size="sm" className="w-[180px] rounded-xl bg-background" aria-label="Filter by Airflow outcome">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="all">All metrics</SelectItem>
+                  <SelectItem value="failed">Failed run only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={clearFilters}>
+              Reset
+            </Button>
           </div>
-          <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={clearFilters}>
-            Reset
-          </Button>
+          <CatalogLayoutToggle value={layout} onChange={setLayout} />
         </div>
         <form onSubmit={onSearchSubmit} className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
@@ -220,47 +228,52 @@ export function MetricsPage() {
 
       <DataTableCard>
         {loading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border/60">
-                <TableHead className="text-muted-foreground font-medium">
-                  <Button variant="ghost" size="sm" className="-ml-2 h-8 rounded-lg font-medium" onClick={cycleNameSort}>
-                    Name {sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-muted-foreground font-medium">Unit</TableHead>
-                <TableHead className="text-muted-foreground font-medium">Tags</TableHead>
-                <TableHead className="text-muted-foreground font-medium">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-ml-2 h-8 rounded-lg font-medium"
-                    onClick={cycleCreatedSort}
-                  >
-                    Created {sortBy === 'created_at' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right text-muted-foreground font-medium">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground py-16 text-center text-sm">
-                    No metrics match this query.
-                  </TableCell>
+          layout === 'list' ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-44 rounded-2xl" />
+              ))}
+            </div>
+          )
+        ) : layout === 'list' ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border/60">
+                  <TableHead className="text-muted-foreground font-medium">
+                    <Button variant="ghost" size="sm" className="-ml-2 h-8 rounded-lg font-medium" onClick={cycleNameSort}>
+                      Name {sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                    </Button>
+                  </TableHead>
+                  <TableHead className="text-muted-foreground font-medium">Unit</TableHead>
+                  <TableHead className="text-muted-foreground font-medium">Tags</TableHead>
+                  <TableHead className="text-muted-foreground font-medium">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="-ml-2 h-8 rounded-lg font-medium"
+                      onClick={cycleCreatedSort}
+                    >
+                      Created {sortBy === 'created_at' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                    </Button>
+                  </TableHead>
                 </TableRow>
-              ) : (
-                rows.map((r) => {
-                  const mvid = r.metric_version_id
-                  const classic = mvid ? getClassicUiMetricUrl(mvid) : null
-                  return (
+              </TableHeader>
+              <TableBody>
+                {rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-muted-foreground py-16 text-center text-sm">
+                      No metrics match this query.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((r) => (
                     <TableRow key={r.metric_version_id || r.id} className="border-border/50">
                       <TableCell>
                         <div className="font-medium">
@@ -287,32 +300,53 @@ export function MetricsPage() {
                       <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
                         {formatDate(r.created_at)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex flex-wrap items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2" asChild>
-                            <Link to={`/metrics/${encodeURIComponent(r.id)}`}>View</Link>
-                          </Button>
-                          {classic ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-muted-foreground h-8 gap-1 rounded-lg px-2"
-                              asChild
-                            >
-                              <a href={classic} target="_blank" rel="noreferrer" title="Classic UI">
-                                <span className="sr-only">Classic UI</span>
-                                <ExternalLinkIcon className="size-3.5" />
-                              </a>
-                            </Button>
-                          ) : null}
-                        </div>
-                      </TableCell>
                     </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="text-muted-foreground p-10 text-center text-sm">No metrics match this query.</div>
+        ) : (
+          <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
+            {rows.map((r) => {
+              const href = `/metrics/${encodeURIComponent(r.id)}`
+              return (
+                <Card
+                  key={r.metric_version_id || r.id}
+                  className="group border-border/70 from-card via-card to-muted/35 hover:border-primary/25 relative overflow-hidden rounded-2xl border bg-linear-to-br shadow-sm transition-[box-shadow,border-color] hover:shadow-md dark:via-card/95 dark:to-muted/25 dark:hover:to-muted/35"
+                >
+                  <Link
+                    to={href}
+                    className="ring-ring absolute inset-0 z-0 rounded-2xl focus-visible:ring-2 focus-visible:outline-none"
+                    aria-label={`Open metric: ${r.name}`}
+                  />
+                  <CardHeader className="pointer-events-none relative z-10 gap-2">
+                    <CardTitle className="text-lg leading-snug">
+                      <span className="text-foreground group-hover:text-primary transition-colors">{r.name}</span>
+                    </CardTitle>
+                    {r.description ? (
+                      <p className="text-muted-foreground line-clamp-2 text-sm leading-relaxed">{r.description}</p>
+                    ) : null}
+                    <Badge variant="secondary" className="w-fit rounded-md font-normal">
+                      {r.unit}
+                    </Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {r.tags.length
+                        ? r.tags.map((t) => (
+                            <Badge key={t} variant="outline" className="font-normal">
+                              {t}
+                            </Badge>
+                          ))
+                        : null}
+                    </div>
+                    <p className="text-muted-foreground text-xs">{formatDate(r.created_at)}</p>
+                  </CardHeader>
+                </Card>
+              )
+            })}
+          </div>
         )}
       </DataTableCard>
 

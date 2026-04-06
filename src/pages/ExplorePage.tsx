@@ -173,11 +173,7 @@ function ExploreFlowPanel({
               {busy ? 'Opening…' : selected.type === 'report' ? 'Open report' : 'Open metric'}
             </Button>
           </div>
-        ) : (
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            Click a node to focus its connections. Use Open to go to the report or metric in this app.
-          </p>
-        )}
+        ) : null}
       </div>
     </Panel>
   )
@@ -309,7 +305,6 @@ function ExplorePageInner() {
     <div className="space-y-6">
       <PageHeader
         title="Explore"
-        description="Reports are the hub in the center; metrics orbit outside. A metric used by several reports sits between them. Filter by tag or click a node to focus. Lines show which report uses which metric."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => void load()}>

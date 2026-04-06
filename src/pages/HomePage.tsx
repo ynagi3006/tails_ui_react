@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowDownAZIcon,
   ArrowDownWideNarrowIcon,
@@ -14,7 +14,7 @@ import { PaginationBar } from '@/components/pagination-bar'
 import { ToolbarCard } from '@/components/toolbar-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -33,7 +33,6 @@ import { formatDate, formatDateOnly } from '@/lib/format-date'
 import { cn } from '@/lib/utils'
 
 const HOME_PAGE_SIZE = 12
-const STATUS_ALL = 'ALL'
 const SORT_CREATED = 'created_at'
 const SORT_NAME = 'name'
 
@@ -43,7 +42,6 @@ function buildReportsQuery(params: {
   order: string
   search: string
   tags: string[]
-  status: string | null
   reportIds?: string[]
 }) {
   const sp = new URLSearchParams({
@@ -51,10 +49,10 @@ function buildReportsQuery(params: {
     skip: String((params.page - 1) * HOME_PAGE_SIZE),
     sort: params.sort,
     order: params.order,
+    status: 'published',
   })
   if (params.search) sp.set('search', params.search)
   params.tags.forEach((t) => sp.append('tag', t))
-  if (params.status) sp.set('status', params.status)
   if (params.reportIds?.length) sp.set('report_ids', params.reportIds.join(','))
   return sp.toString()
 }
@@ -65,7 +63,6 @@ export function HomePage() {
   const [searchInput, setSearchInput] = useState('')
   /** Committed on Search submit (avoids refetch on every keystroke). */
   const [appliedSearch, setAppliedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState(STATUS_ALL)
   const [availability, setAvailability] = useState<'available' | 'favorited'>('available')
   const [sortBy, setSortBy] = useState(SORT_CREATED)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -75,13 +72,6 @@ export function HomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasNextPage, setHasNextPage] = useState(false)
-
-  const apiStatus = useMemo(() => {
-    if (!statusFilter || statusFilter === STATUS_ALL) return null
-    const lower = statusFilter.toLowerCase()
-    if (lower === 'draft' || lower === 'published' || lower === 'archived') return lower
-    return null
-  }, [statusFilter])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -101,7 +91,6 @@ export function HomePage() {
         order: sortOrder,
         search,
         tags,
-        status: apiStatus,
         reportIds: availability === 'favorited' ? favList : undefined,
       })
       const data = await apiFetchJson<unknown>(`/reports?${qs}`)
@@ -115,7 +104,7 @@ export function HomePage() {
     } finally {
       setLoading(false)
     }
-  }, [apiStatus, appliedSearch, availability, favoriteIds, page, sortBy, sortOrder])
+  }, [appliedSearch, availability, favoriteIds, page, sortBy, sortOrder])
 
   useEffect(() => {
     void load()
@@ -134,40 +123,29 @@ export function HomePage() {
       <PageHeader
         eyebrow="Library"
         title="Reports"
-        description="Browse reports from the API. Favorites stay in this browser (same storage key as the classic UI)."
         actions={
-          <Card className="border-border/70 bg-card/80 w-full max-w-[11rem] rounded-2xl shadow-sm backdrop-blur-sm sm:w-auto">
-            <CardHeader className="gap-0 px-4 py-3">
-              <CardDescription className="text-xs">Favorites</CardDescription>
-              <CardTitle className="text-2xl tabular-nums">{favoriteCount}</CardTitle>
-            </CardHeader>
-          </Card>
+          favoriteCount > 0 ? (
+            <div
+              className="flex items-center gap-2.5"
+              role="status"
+              aria-label={`Favorite Reports: ${favoriteCount} saved`}
+            >
+              <div className="border-border/70 bg-card/80 text-card-foreground flex size-11 shrink-0 items-center justify-center rounded-full border shadow-sm backdrop-blur-sm">
+                <span className="text-foreground text-sm font-semibold tabular-nums leading-none">
+                  {favoriteCount}
+                </span>
+              </div>
+              <span className="text-foreground text-sm font-medium leading-snug whitespace-nowrap">
+                Favorite Reports
+              </span>
+            </div>
+          ) : undefined
         }
       />
 
       <section className="space-y-5">
         <ToolbarCard>
           <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Status</Label>
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => {
-                  setStatusFilter(v)
-                  setPage(1)
-                }}
-              >
-                <SelectTrigger size="sm" className="w-[148px] rounded-xl bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  <SelectItem value={STATUS_ALL}>All</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="published">Published</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">View</Label>
               <Select
@@ -255,11 +233,11 @@ export function HomePage() {
             ))}
           </div>
         ) : rows.length === 0 ? (
-          <Card className="border-border/60 rounded-2xl border-dashed shadow-none">
+          <Card className="border-border/60 from-card via-muted/20 to-muted/40 rounded-2xl border-dashed bg-linear-to-br shadow-none dark:via-muted/10 dark:to-muted/25">
             <CardContent className="text-muted-foreground py-14 text-center text-sm">
               {availability === 'favorited' && favoriteIds.size === 0
                 ? 'Star reports to collect them here.'
-                : 'Nothing matches these filters. Try widening status or clearing search.'}
+                : 'Nothing matches. Try clearing search or tags.'}
             </CardContent>
           </Card>
         ) : (
@@ -271,7 +249,7 @@ export function HomePage() {
               return (
                 <Card
                   key={r.id || i}
-                  className="group border-border/70 hover:border-primary/25 relative cursor-pointer rounded-2xl border bg-card/90 shadow-sm transition-[box-shadow,border-color] hover:shadow-md"
+                  className="group border-border/70 from-card via-card to-muted/35 hover:border-primary/25 relative cursor-pointer overflow-hidden rounded-2xl border bg-linear-to-br shadow-sm transition-[box-shadow,border-color] hover:shadow-md dark:via-card/95 dark:to-muted/25 dark:hover:to-muted/35"
                 >
                   <Link
                     to={reportHref}
@@ -305,7 +283,7 @@ export function HomePage() {
                         <HeartIcon className={cn('size-4', favorited && 'fill-primary text-primary')} />
                       </Button>
                     </div>
-                    <div className="border-border/60 bg-muted/25 space-y-2 rounded-xl border px-3 py-2.5">
+                    <div className="border-border/60 from-muted/40 to-muted/15 space-y-2 rounded-xl border bg-linear-to-br px-3 py-2.5 dark:from-muted/25 dark:to-muted/10">
                       <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
                         <CalendarDaysIcon className="size-3.5 shrink-0 opacity-80" aria-hidden />
                         Editions

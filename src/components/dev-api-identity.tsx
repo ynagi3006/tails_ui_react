@@ -115,10 +115,7 @@ export function DevApiIdentityPopover({ onIdentityChange }: DevApiIdentityProps)
         <div className="space-y-4">
           <div>
             <p className="text-foreground text-sm font-semibold">Dev API identity</p>
-            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-              Sent as headers to the Tails API (same as classic UI). Use with{' '}
-              <code className="bg-muted rounded px-0.5">TAILS_AUTH_MODE=dev_headers</code> or Okta bearer.
-            </p>
+            <p className="text-muted-foreground mt-1 text-xs">Optional headers for API requests.</p>
           </div>
 
           <div className="space-y-2">
