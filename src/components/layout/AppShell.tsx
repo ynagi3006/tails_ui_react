@@ -3,6 +3,7 @@ import { BarChart3Icon, ChevronDownIcon } from 'lucide-react'
 
 import { AgentChatWidget } from '@/components/agent-chat-widget'
 import { DevApiIdentityPopover } from '@/components/dev-api-identity'
+import { FeatureRequestFooterTrigger } from '@/components/feature-request-dialog'
 import { ThemeMenu } from '@/components/theme-menu'
 import { getApiBaseUrl } from '@/config/env'
 import { Button } from '@/components/ui/button'
@@ -104,6 +105,12 @@ export function AppShell() {
       <main className="mx-auto w-full max-w-[min(100%,112rem)] flex-1 px-4 py-8 sm:px-6">
         <Outlet />
       </main>
+      <footer className="border-border/60 text-muted-foreground border-t py-6 text-sm">
+        <div className="mx-auto flex max-w-[min(100%,112rem)] flex-col items-center justify-between gap-3 px-4 sm:flex-row sm:px-6">
+          <p className="text-center sm:text-left">© {new Date().getFullYear()} Tails Internal Tools</p>
+          <FeatureRequestFooterTrigger />
+        </div>
+      </footer>
       <AgentChatWidget />
     </div>
   )

@@ -139,9 +139,7 @@ export function CreateReportDialog({
         <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col">
           <DialogHeader className="border-border/60 space-y-1.5 border-b px-6 py-5 text-left">
             <DialogTitle className="text-lg font-semibold tracking-tight">New report</DialogTitle>
-            <DialogDescription className="text-muted-foreground text-sm leading-relaxed">
-              Create via the API. You can refine the template later in the classic UI.
-            </DialogDescription>
+            <DialogDescription className="sr-only">Create a new report.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-8 px-6 py-6">
@@ -238,10 +236,6 @@ export function CreateReportDialog({
                 className="font-mono text-[0.8rem] leading-relaxed rounded-lg"
                 spellCheck={false}
               />
-              <p className="text-muted-foreground text-[0.7rem] leading-snug">
-                Jinja2 markup. Include a <code className="bg-muted/80 rounded px-1 py-0.5 text-[0.65rem]">.tails-report</code>{' '}
-                wrapper for consistent styling.
-              </p>
             </Section>
 
             <Section title="Tags" className="pb-0">

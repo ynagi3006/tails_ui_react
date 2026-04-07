@@ -42,7 +42,7 @@ export default function App() {
           <Route path="report-builder" element={<ReportBuilderPage />} />
           <Route
             path="admin"
-            element={<PlaceholderPage title="Admin" description="Permission groups, members, and user profiles." />}
+            element={<PlaceholderPage title="Admin" />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

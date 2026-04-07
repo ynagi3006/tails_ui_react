@@ -30,25 +30,27 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.99 0.002 280);
-  --foreground: oklch(0.2 0.02 280);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 280);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 280);
-  /* Tails-ish accent (purple) */
-  --primary: oklch(0.52 0.22 290);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.01 280);
-  --secondary-foreground: oklch(0.25 0.02 280);
-  --muted: oklch(0.96 0.01 280);
-  --muted-foreground: oklch(0.45 0.02 280);
-  --accent: oklch(0.94 0.04 290);
-  --accent-foreground: oklch(0.25 0.05 290);
+  /* Soft cool-violet canvas — less stark than pure white */
+  --background: oklch(0.962 0.02 285);
+  --foreground: oklch(0.215 0.035 285);
+  --card: oklch(0.985 0.014 285);
+  --card-foreground: oklch(0.215 0.035 285);
+  --popover: oklch(0.99 0.012 285);
+  --popover-foreground: oklch(0.215 0.035 285);
+  /* Brighter, more saturated violet (still readable on white) */
+  --primary: oklch(0.52 0.24 292);
+  --primary-foreground: oklch(0.99 0.01 285);
+  /* Tinted surfaces so chrome feels colored, not flat gray */
+  --secondary: oklch(0.928 0.032 285);
+  --secondary-foreground: oklch(0.26 0.045 285);
+  --muted: oklch(0.918 0.024 282);
+  --muted-foreground: oklch(0.44 0.038 285);
+  --accent: oklch(0.9 0.055 295);
+  --accent-foreground: oklch(0.26 0.07 295);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.01 280);
-  --input: oklch(0.9 0.01 280);
-  --ring: oklch(0.52 0.22 290);
+  --border: oklch(0.875 0.028 285);
+  --input: oklch(0.875 0.028 285);
+  --ring: oklch(0.52 0.24 292);
 }
 
 .dark {
@@ -81,9 +83,11 @@
   }
   body {
     @apply bg-background text-foreground min-h-svh;
+    /* Layered washes: violet + cyan + soft magenta — colorful but restrained */
     background-image:
-      radial-gradient(ellipse 120% 70% at 50% -25%, oklch(0.52 0.18 290 / 0.09), transparent 55%),
-      radial-gradient(ellipse 80% 50% at 100% 0%, oklch(0.55 0.12 260 / 0.05), transparent 50%);
+      radial-gradient(ellipse 125% 78% at 50% -28%, oklch(0.55 0.22 292 / 0.14), transparent 58%),
+      radial-gradient(ellipse 90% 65% at 100% 0%, oklch(0.58 0.17 210 / 0.11), transparent 54%),
+      radial-gradient(ellipse 75% 55% at 0% 102%, oklch(0.6 0.15 305 / 0.09), transparent 52%);
   }
   .dark body {
     background-image:

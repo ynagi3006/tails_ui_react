@@ -20,8 +20,8 @@ export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
             {description ? <CardDescription className="text-sm leading-relaxed">{description}</CardDescription> : null}
           </div>
         </CardHeader>
-        <CardContent className="text-muted-foreground border-border/50 border-t pt-6 text-sm leading-relaxed">
-          This route is not built in the React shell yet. The classic Jinja UI still owns editing flows here.
+        <CardContent className="text-muted-foreground border-border/50 border-t pt-6 text-sm">
+          Not available in this UI yet.
         </CardContent>
       </Card>
     </div>

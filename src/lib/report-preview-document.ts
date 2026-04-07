@@ -148,6 +148,103 @@ html.dark .tails-report-preview-root .tails-report th {
 `
     : ''
 
+  const metricClickCss = `
+.tails-report-preview-root td.metric-name {
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.tails-report-preview-root td.metric-name:hover {
+  background: rgba(99, 102, 241, 0.10) !important;
+  box-shadow: inset 0 0 0 1.5px rgba(99, 102, 241, 0.35);
+  border-radius: 3px;
+}
+html.dark .tails-report-preview-root td.metric-name:hover {
+  background: rgba(129, 140, 248, 0.15) !important;
+  box-shadow: inset 0 0 0 1.5px rgba(129, 140, 248, 0.4);
+}
+`
+
+  const metricClickScript = `
+<script>
+(function() {
+  function getSectionHeader(td) {
+    var table = td.closest('table');
+    if (!table) return '';
+    var prev = table.previousElementSibling;
+    while (prev) {
+      var tag = prev.tagName;
+      if (tag === 'H2' || tag === 'H3' || tag === 'H4') return prev.textContent.trim();
+      prev = prev.previousElementSibling;
+    }
+    return '';
+  }
+
+  function getColumnDates(td) {
+    var table = td.closest('table');
+    if (!table) return [];
+    var thead = table.querySelector('thead');
+    if (!thead) return [];
+    var headerRow = thead.querySelector('tr');
+    if (!headerRow) return [];
+    var dates = [];
+    for (var i = 1; i < headerRow.children.length; i++) {
+      var t = headerRow.children[i].textContent.trim();
+      if (t) dates.push(t);
+    }
+    return dates;
+  }
+
+  function getRowValues(td) {
+    var row = td.parentNode;
+    if (!row) return [];
+    var table = td.closest('table');
+    var thead = table ? table.querySelector('thead') : null;
+    var headerRow = thead ? thead.querySelector('tr') : null;
+    var pairs = [];
+    for (var i = 1; i < row.children.length; i++) {
+      var val = row.children[i].textContent.trim();
+      var colHeader = headerRow && headerRow.children[i] ? headerRow.children[i].textContent.trim() : '';
+      pairs.push({ date: colHeader, value: val });
+    }
+    return pairs;
+  }
+
+  function isMetricNameCell(td) {
+    if (td.classList.contains('metric-name')) return true;
+    var row = td.parentNode;
+    if (!row || row.tagName !== 'TR') return false;
+    var tbody = row.parentNode;
+    if (!tbody || (tbody.tagName !== 'TBODY' && tbody.tagName !== 'TABLE')) return false;
+    if (row.children[0] === td && !td.classList.contains('num')) {
+      var text = td.textContent.trim();
+      if (text && text !== '-' && text !== '—') return true;
+    }
+    return false;
+  }
+
+  document.addEventListener('click', function(e) {
+    var td = e.target.closest('td');
+    if (!td) return;
+    if (!isMetricNameCell(td)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var metricName = td.textContent.trim();
+    var rect = td.getBoundingClientRect();
+    window.parent.postMessage({
+      type: 'tails:metric-click',
+      metricName: metricName,
+      value: '',
+      columnHeader: '',
+      rowContext: metricName,
+      sectionHeader: getSectionHeader(td),
+      clickRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      columnDates: getColumnDates(td),
+      rowValues: getRowValues(td)
+    }, '*');
+  });
+})();
+</script>`
+
   return (
     '<!DOCTYPE html><html' +
     htmlClass +
@@ -159,7 +256,9 @@ html.dark .tails-report-preview-root .tails-report th {
     '<style id="tails-preview-layout-tail">' +
     layoutTailCss +
     (themeTailCss ? themeTailCss : '') +
+    metricClickCss +
     '</style>' +
+    metricClickScript +
     '</body></html>'
   )
 }

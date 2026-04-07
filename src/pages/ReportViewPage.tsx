@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeftIcon,
   CalendarIcon,
@@ -10,6 +10,8 @@ import {
   SaveIcon,
   Settings2Icon,
   SparklesIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -21,22 +23,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import { ReportPreviewFrame } from '@/components/report-preview-frame'
+import { openChatWithPrompt } from '@/components/agent-chat-widget'
+import { EditionCalendar } from '@/components/edition-calendar'
+import { ReportAnalysisPanel } from '@/components/report-analysis-panel'
+import { ReportPreviewFrame, type MetricClickPayload } from '@/components/report-preview-frame'
 import { apiFetchJson, getClassicUiReportUrl } from '@/lib/api'
 import { formatDate, formatDateOnly } from '@/lib/format-date'
 import { useTheme } from '@/hooks/use-theme'
 import { useHtmlBlobUrl } from '@/lib/html-blob-url'
 import { cn } from '@/lib/utils'
-
-type RenderedReport = {
-  report_id: string
-  report_name: string
-  html: string
-  rendered_at: string
-  metrics_used: string[]
-}
 
 type ReportDetail = Record<string, unknown>
 
@@ -79,18 +77,15 @@ export function ReportViewPage() {
   const { reportId = '' } = useParams<{ reportId: string }>()
   const { resolved: themeResolved } = useTheme()
   const [pageTab, setPageTab] = useState<PageTab>('preview')
-  const [mode, setMode] = useState<'live' | 'editions'>('live')
 
   const [report, setReport] = useState<ReportDetail | null>(null)
-  const [rendered, setRendered] = useState<RenderedReport | null>(null)
   const [editions, setEditions] = useState<EditionRow[]>([])
   const [selectedEditionId, setSelectedEditionId] = useState<string | null>(null)
   const [editionHtml, setEditionHtml] = useState<string | null>(null)
   const [editionLoading, setEditionLoading] = useState(false)
 
   const [loadingMeta, setLoadingMeta] = useState(true)
-  const [loadingLive, setLoadingLive] = useState(true)
-  const [loadingEditions, setLoadingEditions] = useState(false)
+  const [loadingEditions, setLoadingEditions] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editionsError, setEditionsError] = useState<string | null>(null)
 
@@ -110,10 +105,41 @@ export function ReportViewPage() {
   const [actionMsg, setActionMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const prevReportVersionIdRef = useRef<string>('')
 
-  const liveIframeUrl = useHtmlBlobUrl(rendered?.html, { theme: themeResolved })
+  const [calendarOpen, setCalendarOpen] = useState(false)
+
   const editionIframeUrl = useHtmlBlobUrl(editionHtml, { theme: themeResolved })
 
   const reportVersionId = reportVersionIdFromReport(report)
+
+  const calendarEditions = useMemo(() => {
+    return editions
+      .filter((e) => e.common_date)
+      .map((e) => ({ id: e.id, dateKey: e.common_date!.slice(0, 10) }))
+  }, [editions])
+
+  const editionsByDateKey = useMemo(() => {
+    const map = new Map<string, EditionRow>()
+    for (const e of editions) {
+      if (e.common_date) {
+        const dk = e.common_date.slice(0, 10)
+        if (!map.has(dk)) map.set(dk, e)
+      }
+    }
+    return map
+  }, [editions])
+
+  const selectedDateKey = useMemo(() => {
+    const sel = editions.find((e) => e.id === selectedEditionId)
+    return sel?.common_date?.slice(0, 10) ?? null
+  }, [editions, selectedEditionId])
+
+  const handleCalendarSelect = (dateKey: string) => {
+    const ed = editionsByDateKey.get(dateKey)
+    if (ed) {
+      setSelectedEditionId(ed.id)
+      setCalendarOpen(false)
+    }
+  }
 
   const loadReport = useCallback(async () => {
     if (!reportId) return
@@ -122,21 +148,6 @@ export function ReportViewPage() {
       setReport(r)
     } catch {
       setReport(null)
-    }
-  }, [reportId])
-
-  const loadLive = useCallback(async () => {
-    if (!reportId) return
-    setLoadingLive(true)
-    setError(null)
-    try {
-      const data = await apiFetchJson<RenderedReport>(`/reports/${encodeURIComponent(reportId)}/render`)
-      setRendered(data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to render report')
-      setRendered(null)
-    } finally {
-      setLoadingLive(false)
     }
   }, [reportId])
 
@@ -225,15 +236,11 @@ export function ReportViewPage() {
   }, [reportId, loadReport])
 
   useEffect(() => {
-    void loadLive()
-  }, [loadLive])
+    void loadEditions()
+  }, [loadEditions])
 
   useEffect(() => {
-    if (mode === 'editions') void loadEditions()
-  }, [mode, loadEditions])
-
-  useEffect(() => {
-    if (!selectedEditionId || mode !== 'editions') {
+    if (!selectedEditionId) {
       setEditionHtml(null)
       return
     }
@@ -255,7 +262,7 @@ export function ReportViewPage() {
     return () => {
       cancelled = true
     }
-  }, [selectedEditionId, mode])
+  }, [selectedEditionId])
 
   useEffect(() => {
     if (!report) return
@@ -275,8 +282,7 @@ export function ReportViewPage() {
 
   const refreshAll = () => {
     void loadReport()
-    void loadLive()
-    if (mode === 'editions') void loadEditions()
+    void loadEditions()
   }
 
   const saveTemplate = async () => {
@@ -296,7 +302,7 @@ export function ReportViewPage() {
       setTemplateBaseline(t)
       setActionMsg({ text: 'Template saved to this report version (in place).' })
       await loadReport()
-      await loadLive()
+      await loadEditions()
     } catch (e) {
       setActionMsg({ text: e instanceof Error ? e.message : 'Save failed', error: true })
     } finally {
@@ -329,7 +335,7 @@ export function ReportViewPage() {
       })
       setReport(updated)
       setActionMsg({ text: 'Report details saved.' })
-      await loadLive()
+      await loadEditions()
     } catch (e) {
       setActionMsg({ text: e instanceof Error ? e.message : 'Save failed', error: true })
     } finally {
@@ -339,9 +345,8 @@ export function ReportViewPage() {
 
   const classic = getClassicUiReportUrl(reportId)
   const reportName =
-    (rendered?.report_name ||
-      (report ? String(report.report_name ?? report.title ?? '') : '') ||
-      (loadingMeta || loadingLive ? 'Loading…' : 'Report')) as string
+    ((report ? String(report.report_name ?? report.title ?? '') : '') ||
+      (loadingMeta ? 'Loading…' : 'Report')) as string
   const reportDesc = report ? String(report.description ?? '') : ''
   const tags = report ? pickTags(report) : []
   const status = report ? String(report.status ?? '') : ''
@@ -358,8 +363,22 @@ export function ReportViewPage() {
       : ''
     : ''
 
-  const activeIframeUrl = mode === 'live' ? liveIframeUrl : editionIframeUrl
-  const previewLoading = mode === 'live' ? loadingLive : editionLoading
+  const handleMetricClick = useCallback((payload: MetricClickPayload) => {
+    const name = payload.metricName || 'this metric'
+    const values = payload.rowValues
+      ?.filter((v) => v.date && v.value)
+      .map((v) => `${v.date}: ${v.value}`)
+      .join(', ')
+    let prompt = `Analyse the metric "${name}"`
+    if (reportName) prompt += ` from the report "${reportName}"`
+    if (values) prompt += `.\n\nHere are the recent values from the report: ${values}`
+    prompt +=
+      '.\n\nGive a concise summary: what it means, the latest vs prior period, and one or two notable callouts. Keep it brief; I can ask follow-ups if I want more depth.'
+    openChatWithPrompt(prompt)
+  }, [reportName])
+
+  const activeIframeUrl = editionIframeUrl
+  const previewLoading = !selectedEditionId ? loadingEditions : editionLoading
 
   return (
     <div className="space-y-6">
@@ -452,6 +471,16 @@ export function ReportViewPage() {
         )}
       </div>
 
+      {reportId && editionHtml && (
+        <ReportAnalysisPanel
+          reportId={reportId}
+          reportName={reportName}
+          renderedHtml={editionHtml}
+          editionId={selectedEditionId ?? undefined}
+          reportVersionId={reportVersionId ?? undefined}
+        />
+      )}
+
       <div className="border-border/60 bg-muted/25 flex flex-wrap gap-1 rounded-full border p-1">
         {(
           [
@@ -484,10 +513,6 @@ export function ReportViewPage() {
         <Card className="border-border/70 rounded-2xl shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Jinja2 template</CardTitle>
-            <p className="text-muted-foreground text-sm">
-              Same Monaco editor as Report Builder. Saves with{' '}
-              <code className="text-xs">PUT /reports/version/…/template</code> (this version only; no new report version).
-            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {!reportVersionId ? (
@@ -539,10 +564,6 @@ export function ReportViewPage() {
         <Card className="border-border/70 rounded-2xl shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Report metadata</CardTitle>
-            <p className="text-muted-foreground text-sm">
-              Updates the current report version in place via <code className="text-xs">PUT /reports/{'{id}'}</code>{' '}
-              (no template change).
-            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -609,39 +630,7 @@ export function ReportViewPage() {
 
       {pageTab === 'preview' ? (
         <>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'live' ? 'default' : 'outline'}
-              className="rounded-full"
-              onClick={() => setMode('live')}
-            >
-              <SparklesIcon className="size-3.5" />
-              Live render
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'editions' ? 'default' : 'outline'}
-              className="rounded-full"
-              onClick={() => setMode('editions')}
-            >
-              <CalendarIcon className="size-3.5" />
-              Saved editions
-            </Button>
-          </div>
-
-          {mode === 'live' && error ? (
-            <div
-              className="border-destructive/30 bg-destructive/5 text-destructive rounded-2xl border px-4 py-3 text-sm"
-              role="alert"
-            >
-              {error}
-            </div>
-          ) : null}
-
-          {mode === 'editions' && editionsError ? (
+          {editionsError ? (
             <div
               className="border-destructive/30 bg-destructive/5 text-destructive rounded-2xl border px-4 py-3 text-sm"
               role="alert"
@@ -650,126 +639,94 @@ export function ReportViewPage() {
             </div>
           ) : null}
 
-          <div
-            className={cn(
-              'grid gap-4',
-              mode === 'editions' ? 'lg:grid-cols-[minmax(220px,280px)_1fr]' : 'grid-cols-1',
-            )}
-          >
-            {mode === 'editions' ? (
-              <Card className="border-border/70 h-fit max-h-[min(70vh,720px)] overflow-hidden rounded-2xl shadow-sm lg:sticky lg:top-24">
-                <CardContent className="p-0">
-                  <div className="border-border/60 bg-muted/20 border-b px-3 py-2.5 text-xs font-medium">
-                    Editions ({editions.length})
-                  </div>
-                  {loadingEditions ? (
-                    <div className="space-y-2 p-3">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Skeleton key={i} className="h-14 w-full rounded-lg" />
-                      ))}
-                    </div>
-                  ) : editions.length === 0 ? (
-                    <p className="text-muted-foreground p-4 text-sm leading-relaxed">
-                      No saved editions for this report yet. Editions appear after scheduled or manual publish jobs write
-                      HTML to storage.
-                    </p>
-                  ) : (
-                    <ul className="max-h-[min(60vh,560px)] overflow-y-auto p-2">
-                      {editions.map((ed) => {
-                        const dimCount = Object.keys(ed.dimensions).length
-                        const active = ed.id === selectedEditionId
-                        return (
-                          <li key={ed.id} className="mb-1">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedEditionId(ed.id)}
-                              className={cn(
-                                'border-border/60 hover:bg-muted/50 w-full rounded-xl border px-3 py-2.5 text-left text-sm transition-colors',
-                                active && 'border-primary/40 bg-primary/5 ring-primary/20 ring-1',
-                              )}
-                            >
-                              <div className="text-foreground font-medium">
-                                {ed.common_date ? formatDateOnly(ed.common_date) : '—'}
-                              </div>
-                              <div className="text-muted-foreground text-xs">
-                                {ed.created_at ? formatDate(ed.created_at) : ''}
-                                {dimCount ? ` · ${dimCount} dimension${dimCount === 1 ? '' : 's'}` : ''}
-                              </div>
-                              {dimCount ? (
-                                <div className="mt-1.5 flex flex-wrap gap-0.5">
-                                  {Object.entries(ed.dimensions)
-                                    .slice(0, 4)
-                                    .map(([k, v]) => (
-                                      <Badge key={k} variant="secondary" className="font-mono text-[10px] font-normal">
-                                        {k}={v}
-                                      </Badge>
-                                    ))}
-                                  {dimCount > 4 ? (
-                                    <span className="text-muted-foreground text-[10px]">+{dimCount - 4}</span>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
+          <div className="space-y-3">
+            {editions.length > 0 && (
+              <div className="flex items-center gap-3">
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="h-9 gap-2 rounded-xl px-3.5 text-sm">
+                      <CalendarIcon className="size-3.5 text-muted-foreground" />
+                      {selectedDateKey ? formatDateOnly(selectedDateKey) : 'Select edition'}
+                      <ChevronDownIcon className={cn(
+                        'size-3.5 text-muted-foreground transition-transform',
+                        calendarOpen && 'rotate-180',
+                      )} />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto p-3">
+                    <EditionCalendar
+                      editions={calendarEditions}
+                      selectedDate={selectedDateKey}
+                      onSelect={handleCalendarSelect}
+                    />
+                  </PopoverContent>
+                </Popover>
 
-            <div className="min-w-0 space-y-3">
-              {mode === 'live' && rendered?.metrics_used?.length ? (
-                <details className="border-border/70 bg-muted/15 group rounded-xl border">
-                  <summary className="hover:bg-muted/25 flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm select-none [&::-webkit-details-marker]:hidden">
-                    <span>
-                      <span className="text-muted-foreground font-medium">Metrics in template</span>
-                      <span className="text-foreground ml-1.5 tabular-nums">({rendered.metrics_used.length})</span>
-                    </span>
-                    <ChevronDownIcon className="text-muted-foreground size-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
-                  </summary>
-                  <div className="border-border/60 flex max-h-[min(40vh,280px)] flex-wrap gap-1.5 overflow-y-auto border-t px-3 py-2.5">
-                    {rendered.metrics_used.map((m) => (
-                      <Badge key={m} variant="secondary" className="font-normal">
-                        {m}
-                      </Badge>
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-
-              {mode === 'live' ? (
-                <p className="text-muted-foreground text-xs">
-                  Live view runs the current template against latest metric data (not necessarily the same as a stored
-                  edition).
-                </p>
-              ) : (
-                <p className="text-muted-foreground text-xs">
-                  Saved editions are HTML snapshots from publishing. Select one to preview.
-                </p>
-              )}
-
-              <DataTableCard className="p-0">
-                {previewLoading ? (
-                  <Skeleton className="h-[min(52vh,560px)] w-full rounded-none rounded-b-2xl" />
-                ) : activeIframeUrl ? (
-                  <ReportPreviewFrame
-                    key={activeIframeUrl}
-                    src={activeIframeUrl}
-                    title={mode === 'live' ? 'Live rendered report' : 'Edition preview'}
-                  />
-                ) : mode === 'editions' && selectedEditionId ? (
-                  <div className="text-muted-foreground flex h-[min(40vh,320px)] items-center justify-center px-6 text-sm">
-                    This edition has no inline HTML (content may only exist in S3). Open the classic UI to view it.
-                  </div>
-                ) : (
-                  <div className="text-muted-foreground flex h-[min(40vh,320px)] items-center justify-center text-sm">
-                    Nothing to preview.
+                {editions.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-7"
+                      title="Previous edition"
+                      disabled={!selectedEditionId || editions.findIndex((e) => e.id === selectedEditionId) >= editions.length - 1}
+                      onClick={() => {
+                        const idx = editions.findIndex((e) => e.id === selectedEditionId)
+                        if (idx >= 0 && idx < editions.length - 1) setSelectedEditionId(editions[idx + 1].id)
+                      }}
+                    >
+                      <ChevronLeftIcon className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-7"
+                      title="Next edition"
+                      disabled={!selectedEditionId || editions.findIndex((e) => e.id === selectedEditionId) <= 0}
+                      onClick={() => {
+                        const idx = editions.findIndex((e) => e.id === selectedEditionId)
+                        if (idx > 0) setSelectedEditionId(editions[idx - 1].id)
+                      }}
+                    >
+                      <ChevronRightIcon className="size-4" />
+                    </Button>
                   </div>
                 )}
-              </DataTableCard>
-            </div>
+
+                <span className="text-xs text-muted-foreground">
+                  {editions.length} edition{editions.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
+
+            <DataTableCard className="p-0">
+              {activeIframeUrl && !previewLoading && (
+                <div className="flex items-center gap-1.5 border-b px-4 py-2 text-xs text-muted-foreground">
+                  <SparklesIcon className="size-3 text-indigo-400" />
+                  Click any metric name to chat with AI about it
+                </div>
+              )}
+              {previewLoading ? (
+                <Skeleton className="h-[min(52vh,560px)] w-full rounded-none rounded-b-2xl" />
+              ) : activeIframeUrl ? (
+                <ReportPreviewFrame
+                  key={activeIframeUrl}
+                  src={activeIframeUrl}
+                  title="Edition preview"
+                  onMetricClick={handleMetricClick}
+                />
+              ) : selectedEditionId ? (
+                <div className="text-muted-foreground flex h-[min(40vh,320px)] items-center justify-center px-6 text-sm">
+                  This edition has no inline HTML (content may only exist in S3). Open the classic UI to view it.
+                </div>
+              ) : loadingEditions ? (
+                <Skeleton className="h-[min(52vh,560px)] w-full rounded-none rounded-b-2xl" />
+              ) : (
+                <div className="text-muted-foreground flex h-[min(40vh,320px)] items-center justify-center text-sm">
+                  No editions available for this report.
+                </div>
+              )}
+            </DataTableCard>
           </div>
         </>
       ) : null}

@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   DatabaseIcon,
   ExternalLinkIcon,
+  HeartIcon,
   FileCode2Icon,
   FileTextIcon,
   RefreshCwIcon,
@@ -39,6 +40,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetchJson, getClassicUiMetricUrl } from '@/lib/api'
+import { useMetricFavorites } from '@/hooks/use-metric-favorites'
 import { formatDate } from '@/lib/format-date'
 import { metricNameFromRow, metricVersionIdFromRow } from '@/lib/parse-metric-response'
 import { cn } from '@/lib/utils'
@@ -124,17 +126,56 @@ function parseDatapointDetail(raw: Record<string, unknown>): DatapointDetailRow 
   }
 }
 
-function KeyValueBlock({ title, entries }: { title: string; entries: [string, string][] }) {
+function datapointValueLooksStructured(value: string): boolean {
+  const t = value.trim()
+  if (t.length > 100) return true
+  if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) return true
+  return t.includes('\n')
+}
+
+function DatapointValueCell({ value }: { value: string }) {
+  if (!value) return <span className="text-muted-foreground">—</span>
+  if (datapointValueLooksStructured(value)) {
+    return (
+      <pre
+        className="bg-background/90 text-foreground border-border/60 max-h-32 max-w-full overflow-auto rounded-md border px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all shadow-inner"
+        tabIndex={0}
+      >
+        {value}
+      </pre>
+    )
+  }
+  return <span className="text-foreground text-[13px] leading-snug wrap-break-word">{value}</span>
+}
+
+function DatapointKvSection({ title, accent, entries }: { title: string; accent: string; entries: [string, string][] }) {
   if (entries.length === 0) return null
   return (
-    <div className="space-y-2">
-      <p className="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase">{title}</p>
-      <ul className="space-y-3">
+    <div
+      className={cn(
+        'border-border/50 bg-muted/25 rounded-lg border p-2.5 shadow-sm',
+        'ring-1 ring-inset ring-black/3 dark:ring-white/4',
+      )}
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', accent)} aria-hidden />
+        <span className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">{title}</span>
+        <span className="bg-border/80 h-px min-w-3 flex-1" aria-hidden />
+        <span className="text-muted-foreground/80 font-mono text-[10px] tabular-nums">{entries.length}</span>
+      </div>
+      <ul className="space-y-2.5">
         {entries.map(([k, v]) => (
           <li key={k} className="list-none">
-            <div className="text-muted-foreground text-[0.7rem] font-medium">{k}</div>
-            <div className="text-foreground mt-0.5 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
-              {v || '—'}
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
+              <Badge
+                variant="secondary"
+                className="text-muted-foreground w-fit shrink-0 rounded-md px-1.5 py-0 font-mono text-[10px] font-medium tracking-tight"
+              >
+                {k}
+              </Badge>
+              <div className="min-w-0 flex-1 pt-0 sm:pt-0.5">
+                <DatapointValueCell value={v} />
+              </div>
             </div>
           </li>
         ))}
@@ -228,6 +269,7 @@ function DefItem({ label, children }: { label: string; children: ReactNode }) {
 
 export function MetricDetailPage() {
   const { metricId = '' } = useParams<{ metricId: string }>()
+  const { toggle: toggleMetricFavorite, has: hasMetricFavorite } = useMetricFavorites()
   const [metric, setMetric] = useState<MetricDetail | null>(null)
   const [latest, setLatest] = useState<MetricLatest | null>(null)
   const [reports, setReports] = useState<MetricReportRow[]>([])
@@ -552,6 +594,19 @@ export function MetricDetailPage() {
                     variant="outline"
                     size="icon"
                     className="rounded-xl"
+                    title={hasMetricFavorite(metricId) ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-label={hasMetricFavorite(metricId) ? 'Remove from favorites' : 'Add to favorites'}
+                    onClick={() => metricId && toggleMetricFavorite(metricId)}
+                  >
+                    <HeartIcon
+                      className={cn('size-4', hasMetricFavorite(metricId) && 'fill-primary text-primary')}
+                    />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="rounded-xl"
                     title={`Recent datapoints (last ${VIEWER_DATAPOINTS_LIMIT})`}
                     aria-label={`View ${VIEWER_DATAPOINTS_LIMIT} most recent datapoints`}
                     disabled={!mvid}
@@ -604,6 +659,48 @@ export function MetricDetailPage() {
 
           {tab === 'overview' ? (
             <div className="grid gap-4 lg:grid-cols-2">
+              <Card className="border-border/70 lg:col-span-2 rounded-2xl shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-muted-foreground text-sm font-medium">Reports using this metric</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {reports.length === 0 ? (
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      No linked reports found for this metric version.
+                    </p>
+                  ) : (
+                    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {reports.map((r, i) => (
+                        <li key={r.report_id}>
+                          <Link
+                            to={`/reports/${encodeURIComponent(r.report_id)}`}
+                            className={cn(
+                              'border-border/70 bg-card hover:border-primary/30 hover:bg-muted/35 focus-visible:ring-ring group flex min-h-[4.25rem] items-center gap-3 rounded-xl border p-4 shadow-sm transition-all duration-200',
+                              'animate-in fade-in slide-in-from-bottom-2 zoom-in-95 fill-mode-both ease-out',
+                              'hover:-translate-y-0.5 hover:shadow-md',
+                              'focus-visible:ring-2 focus-visible:outline-none',
+                            )}
+                            style={{ animationDuration: '380ms', animationDelay: `${Math.min(i, 12) * 45}ms` }}
+                          >
+                            <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-105">
+                              <FileTextIcon className="size-5" aria-hidden />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="text-foreground block font-medium leading-snug">{r.report_name}</span>
+                              <span className="text-muted-foreground mt-0.5 block text-xs">Open report</span>
+                            </span>
+                            <ChevronRightIcon
+                              className="text-muted-foreground size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1"
+                              aria-hidden
+                            />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card
                 role="button"
                 tabIndex={0}
@@ -692,48 +789,6 @@ export function MetricDetailPage() {
                   </p>
                 </CardContent>
               </Card>
-
-              <Card className="border-border/70 lg:col-span-2 rounded-2xl shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-muted-foreground text-sm font-medium">Reports using this metric</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {reports.length === 0 ? (
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      No linked reports found for this metric version.
-                    </p>
-                  ) : (
-                    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {reports.map((r, i) => (
-                        <li key={r.report_id}>
-                          <Link
-                            to={`/reports/${encodeURIComponent(r.report_id)}`}
-                            className={cn(
-                              'border-border/70 bg-card hover:border-primary/30 hover:bg-muted/35 focus-visible:ring-ring group flex min-h-[4.25rem] items-center gap-3 rounded-xl border p-4 shadow-sm transition-all duration-200',
-                              'animate-in fade-in slide-in-from-bottom-2 zoom-in-95 fill-mode-both ease-out',
-                              'hover:-translate-y-0.5 hover:shadow-md',
-                              'focus-visible:ring-2 focus-visible:outline-none',
-                            )}
-                            style={{ animationDuration: '380ms', animationDelay: `${Math.min(i, 12) * 45}ms` }}
-                          >
-                            <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-105">
-                              <FileTextIcon className="size-5" aria-hidden />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="text-foreground block font-medium leading-snug">{r.report_name}</span>
-                              <span className="text-muted-foreground mt-0.5 block text-xs">Open report</span>
-                            </span>
-                            <ChevronRightIcon
-                              className="text-muted-foreground size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1"
-                              aria-hidden
-                            />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
             </div>
           ) : null}
 
@@ -741,10 +796,6 @@ export function MetricDetailPage() {
             <Card className="border-border/70 rounded-2xl shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base">Edit definition</CardTitle>
-                <p className="text-muted-foreground text-sm">
-                  Updates the latest metric version in place when SQL is unchanged. Uses{' '}
-                  <code className="text-xs">PUT /api/v1/metrics/{'{id}'}</code>.
-                </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -812,10 +863,6 @@ export function MetricDetailPage() {
             <Card className="border-border/70 rounded-2xl shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base">Source SQL</CardTitle>
-                <p className="text-muted-foreground text-sm">
-                  Loaded from S3 via <code className="text-xs">GET /metrics/{'{id}'}/sql</code>. Saving uses{' '}
-                  <code className="text-xs">POST</code> and may create a new version when the query changes.
-                </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 {sqlLoading ? (
@@ -853,10 +900,6 @@ export function MetricDetailPage() {
               <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="text-base">Airflow run logs</CardTitle>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    Final DAG run status per collection for this metric version, from{' '}
-                    <code className="text-xs">GET /airflow/logs?metric_version_id=…</code>. One row per run.
-                  </p>
                 </div>
                 <Button
                   type="button"
@@ -887,10 +930,7 @@ export function MetricDetailPage() {
                     ))}
                   </div>
                 ) : airflowLogs.length === 0 ? (
-                  <p className="text-muted-foreground text-sm leading-relaxed">
-                    No Airflow log rows for this metric version yet. Logs appear after DAG runs report status into
-                    Snowflake.
-                  </p>
+                  <p className="text-muted-foreground text-sm">No Airflow runs logged yet.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-border/60">
                     <Table>
@@ -973,10 +1013,7 @@ export function MetricDetailPage() {
                       <DatabaseIcon className="size-5 shrink-0 opacity-80" aria-hidden />
                       Recent datapoints
                     </DialogTitle>
-                    <DialogDescription>
-                      Up to {VIEWER_DATAPOINTS_LIMIT} newest rows for this version (
-                      <code className="text-xs">record_dttm</code> descending).
-                    </DialogDescription>
+                    <DialogDescription className="sr-only">Recent datapoints for this metric version.</DialogDescription>
                   </div>
                   <Button
                     type="button"
@@ -1014,7 +1051,7 @@ export function MetricDetailPage() {
                         <TableRow className="hover:bg-transparent">
                           <TableHead className="w-[1%] whitespace-nowrap">Recorded</TableHead>
                           <TableHead className="w-[1%] whitespace-nowrap">Value</TableHead>
-                          <TableHead className="min-w-[14rem]">Dimensions & metadata</TableHead>
+                          <TableHead className="min-w-[16rem] max-w-xl">Dimensions &amp; metadata</TableHead>
                           <TableHead className="w-[1%] whitespace-nowrap">Ingested</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1031,13 +1068,21 @@ export function MetricDetailPage() {
                               <TableCell className="font-mono text-sm tabular-nums align-top">
                                 {dp.value != null ? String(dp.value) : '—'}
                               </TableCell>
-                              <TableCell className="align-top">
+                              <TableCell className="max-w-[min(32rem,56vw)] align-top py-3">
                                 {!hasAny ? (
                                   <span className="text-muted-foreground text-xs">—</span>
                                 ) : (
-                                  <div className="space-y-4">
-                                    <KeyValueBlock title="Dimensions" entries={dimEntries} />
-                                    <KeyValueBlock title="Metadata" entries={metaEntries} />
+                                  <div className="flex flex-col gap-2.5">
+                                    <DatapointKvSection
+                                      title="Dimensions"
+                                      accent="bg-sky-500/90 dark:bg-sky-400/90"
+                                      entries={dimEntries}
+                                    />
+                                    <DatapointKvSection
+                                      title="Metadata"
+                                      accent="bg-violet-500/90 dark:bg-violet-400/90"
+                                      entries={metaEntries}
+                                    />
                                   </div>
                                 )}
                               </TableCell>
