@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   EllipsisVerticalIcon,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { parseBlocks, renderInlineMarkdown } from '@/lib/markdown-render'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +35,44 @@ type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
   tools?: string[]
+}
+
+function ChatMarkdown({ text }: { text: string }) {
+  const blocks = parseBlocks(text)
+  const rendered: ReactNode[] = []
+
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]
+    switch (b.type) {
+      case 'heading':
+        rendered.push(
+          <p key={i} className="font-semibold mt-2 first:mt-0">{b.text}</p>,
+        )
+        break
+      case 'hr':
+        rendered.push(<hr key={i} className="my-1.5 border-foreground/10" />)
+        break
+      case 'bullets':
+        rendered.push(
+          <ul key={i} className="list-disc space-y-0.5 pl-4 my-1">
+            {b.items.map((item, j) => <li key={j}>{renderInlineMarkdown(item)}</li>)}
+          </ul>,
+        )
+        break
+      case 'numbered':
+        rendered.push(
+          <ol key={i} className="list-decimal space-y-0.5 pl-4 my-1">
+            {b.items.map((item, j) => <li key={j}>{renderInlineMarkdown(item)}</li>)}
+          </ol>,
+        )
+        break
+      case 'paragraph':
+        rendered.push(<p key={i} className="my-1 first:mt-0 last:mb-0">{renderInlineMarkdown(b.text)}</p>)
+        break
+    }
+  }
+
+  return <div className="space-y-0.5">{rendered}</div>
 }
 
 function loadMessages(): ChatMessage[] {
@@ -109,6 +148,29 @@ export function AgentChatWidget() {
     }
   }, [expanded])
 
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
+  const sendRef = useRef<((text: string) => Promise<void>) | null>(null)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ prompt: string }>).detail
+      if (!detail?.prompt) return
+      setExpanded(true)
+      setPendingPrompt(detail.prompt)
+    }
+    window.addEventListener('tails:chat-prompt', handler)
+    return () => window.removeEventListener('tails:chat-prompt', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!expanded || !pendingPrompt) return
+    const prompt = pendingPrompt
+    setPendingPrompt(null)
+    setInput(prompt)
+    const t = window.setTimeout(() => sendRef.current?.(prompt), 150)
+    return () => window.clearTimeout(t)
+  }, [expanded, pendingPrompt])
+
   const clearConversation = useCallback(() => {
     setMessages([])
     try {
@@ -118,11 +180,11 @@ export function AgentChatWidget() {
     }
   }, [])
 
-  const send = useCallback(async () => {
-    const text = input.trim()
-    if (!text || loading || !apiConfigured) return
+  const sendWithText = useCallback(async (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || loading || !apiConfigured) return
 
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: text }
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
     const history = [...messages, userMsg]
     setMessages(history)
     setInput('')
@@ -150,7 +212,13 @@ export function AgentChatWidget() {
     } finally {
       setLoading(false)
     }
-  }, [apiConfigured, input, loading, location.pathname, messages])
+  }, [apiConfigured, loading, location.pathname, messages])
+
+  sendRef.current = sendWithText
+
+  const send = useCallback(() => {
+    void sendWithText(input)
+  }, [input, sendWithText])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || e.shiftKey) return
@@ -243,10 +311,10 @@ export function AgentChatWidget() {
                       'max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-relaxed break-words',
                       m.role === 'user'
                         ? 'bg-primary text-primary-foreground rounded-br-md'
-                        : 'bg-muted text-foreground rounded-bl-md whitespace-pre-wrap',
+                        : 'bg-muted text-foreground rounded-bl-md',
                     )}
                   >
-                    {m.content}
+                    {m.role === 'assistant' ? <ChatMarkdown text={m.content} /> : m.content}
                   </div>
                   {m.role === 'assistant' && m.tools?.length ? (
                     <div className="text-muted-foreground flex flex-wrap gap-1 px-0.5 text-[0.65rem]">
@@ -314,4 +382,8 @@ export function AgentChatWidget() {
       </Button>
     </div>
   )
+}
+
+export function openChatWithPrompt(prompt: string) {
+  window.dispatchEvent(new CustomEvent('tails:chat-prompt', { detail: { prompt } }))
 }

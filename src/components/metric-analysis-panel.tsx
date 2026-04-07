@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { SearchIcon, SparklesIcon, XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -10,58 +10,38 @@ import {
   type MetricAnalysisPayload,
 } from '@/lib/agent-chat-api'
 import type { MetricClickPayload } from '@/components/report-preview-frame'
+import { parseBlocks, renderInlineMarkdown } from '@/lib/markdown-render'
 import { cn } from '@/lib/utils'
 
-/* ------------------------------------------------------------------ */
-/*  Inline markdown renderer                                          */
-/* ------------------------------------------------------------------ */
-
-function renderInlineMarkdown(raw: string): ReactNode[] {
-  const nodes: ReactNode[] = []
-  const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/
-  let remaining = raw
-  let key = 0
-  while (remaining) {
-    const match = re.exec(remaining)
-    if (!match) {
-      nodes.push(remaining)
-      break
-    }
-    if (match.index > 0) nodes.push(remaining.slice(0, match.index))
-    const [full, , boldItalic, bold, italic, code] = match
-    if (boldItalic)
-      nodes.push(<strong key={key} className="font-semibold"><em>{boldItalic}</em></strong>)
-    else if (bold)
-      nodes.push(<strong key={key} className="font-semibold">{bold}</strong>)
-    else if (italic)
-      nodes.push(<em key={key}>{italic}</em>)
-    else if (code)
-      nodes.push(<code key={key} className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{code}</code>)
-    key++
-    remaining = remaining.slice(match.index + full.length)
-  }
-  return nodes
-}
-
 function AnalysisText({ text }: { text: string }) {
-  const paragraphs = text.split(/\n{2,}/)
+  const blocks = parseBlocks(text)
   return (
-    <div className="space-y-3 text-sm leading-relaxed">
-      {paragraphs.map((p, i) => {
-        const lines = p.split('\n')
-        const isBulletList = lines.every((l) => /^\s*[-*•]\s/.test(l) || !l.trim())
-        if (isBulletList) {
-          return (
-            <ul key={i} className="list-disc space-y-1.5 pl-5">
-              {lines
-                .filter((l) => l.trim())
-                .map((l, j) => (
-                  <li key={j}>{renderInlineMarkdown(l.replace(/^\s*[-*•]\s*/, ''))}</li>
+    <div className="space-y-2 text-sm leading-relaxed">
+      {blocks.map((block, i) => {
+        switch (block.type) {
+          case 'heading':
+            return <h4 key={i} className="font-semibold text-foreground">{block.text}</h4>
+          case 'hr':
+            return <hr key={i} className="border-border/40" />
+          case 'bullets':
+            return (
+              <ul key={i} className="list-disc space-y-1 pl-5">
+                {block.items.map((item, j) => (
+                  <li key={j}>{renderInlineMarkdown(item)}</li>
                 ))}
-            </ul>
-          )
+              </ul>
+            )
+          case 'numbered':
+            return (
+              <ol key={i} className="list-decimal space-y-1 pl-5">
+                {block.items.map((item, j) => (
+                  <li key={j}>{renderInlineMarkdown(item)}</li>
+                ))}
+              </ol>
+            )
+          case 'paragraph':
+            return <p key={i}>{renderInlineMarkdown(block.text)}</p>
         }
-        return <p key={i}>{renderInlineMarkdown(p)}</p>
       })}
     </div>
   )

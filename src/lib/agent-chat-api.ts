@@ -79,6 +79,23 @@ export async function postMetricAnalysis(payload: MetricAnalysisPayload): Promis
   })
 }
 
+export type ReportAnalysisPayload = {
+  report_id: string
+  report_name?: string
+  rendered_html?: string
+  edition_id?: string
+  report_version_id?: string
+  metrics_used?: string[]
+  force_refresh?: boolean
+}
+
+export async function postReportAnalysis(payload: ReportAnalysisPayload): Promise<unknown> {
+  return apiFetchJson<unknown>('/responses/report-analysis', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function extractToolCallLabels(data: unknown): string[] {
   const labels: string[] = []
   const d = data as {

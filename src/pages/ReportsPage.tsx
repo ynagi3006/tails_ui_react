@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { SearchIcon } from 'lucide-react'
+import { HeartIcon, SearchIcon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { CatalogLayoutToggle } from '@/components/catalog-layout-toggle'
@@ -32,8 +32,10 @@ import {
 import { apiFetchJson } from '@/lib/api'
 import { formatDate } from '@/lib/format-date'
 import { useCatalogLayout } from '@/hooks/use-catalog-layout'
+import { useReportFavorites } from '@/hooks/use-report-favorites'
 import { parseSearchInput } from '@/lib/parse-search'
 import { normalizeReportStatus, parseReportsResponse } from '@/lib/report-mapper'
+import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
 const REPORTS_LAYOUT_KEY = 'tails_catalog_reports_layout'
@@ -60,6 +62,7 @@ function mapRow(r: Record<string, unknown>): ReportRow {
 
 export function ReportsPage() {
   const navigate = useNavigate()
+  const { toggle, has } = useReportFavorites()
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -217,6 +220,9 @@ export function ReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border/60">
+                  <TableHead className="text-muted-foreground w-12 px-2 font-medium">
+                    <span className="sr-only">Favorite</span>
+                  </TableHead>
                   <TableHead className="text-muted-foreground font-medium">
                     <Button variant="ghost" size="sm" className="-ml-2 h-8 rounded-lg font-medium" onClick={cycleNameSort}>
                       Name {sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
@@ -239,13 +245,25 @@ export function ReportsPage() {
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground py-16 text-center text-sm">
+                    <TableCell colSpan={5} className="text-muted-foreground py-16 text-center text-sm">
                       No reports match this query.
                     </TableCell>
                   </TableRow>
                 ) : (
                   rows.map((r) => (
                     <TableRow key={r.id} className="border-border/50">
+                      <TableCell className="w-12 px-2 align-top">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
+                          aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                          onClick={() => r.id && toggle(r.id)}
+                        >
+                          <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                        </Button>
+                      </TableCell>
                       <TableCell>
                         <div className="font-medium">
                           <Link to={`/reports/${encodeURIComponent(r.id)}`} className="hover:text-primary hover:underline">
@@ -298,9 +316,25 @@ export function ReportsPage() {
                     aria-label={`Open report: ${r.name}`}
                   />
                   <CardHeader className="pointer-events-none relative z-10 gap-2">
-                    <CardTitle className="text-lg leading-snug">
-                      <span className="text-foreground group-hover:text-primary transition-colors">{r.name}</span>
-                    </CardTitle>
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-lg leading-snug">
+                        <span className="text-foreground group-hover:text-primary transition-colors">{r.name}</span>
+                      </CardTitle>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-primary pointer-events-auto shrink-0 rounded-lg"
+                        aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (r.id) toggle(r.id)
+                        }}
+                      >
+                        <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                      </Button>
+                    </div>
                     <Badge variant="outline" className="w-fit rounded-md capitalize font-normal">
                       {r.status.toLowerCase()}
                     </Badge>
