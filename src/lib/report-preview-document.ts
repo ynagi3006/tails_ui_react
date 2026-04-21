@@ -3,27 +3,37 @@ export type ReportPreviewTheme = 'light' | 'dark'
 /** Wrap rendered report HTML in a minimal document with resets + theme-aware surfaces. */
 export function buildReportPreviewDocument(fragmentHtml: string, theme: ReportPreviewTheme): string {
   const isDark = theme === 'dark'
-  const htmlClass = isDark ? ' class="dark"' : ''
+  const htmlAttrs = (isDark ? ' class="dark"' : '') + ' lang="en" dir="ltr"'
   const scheme = isDark ? 'dark' : 'light'
 
   const css = `
 :root { color-scheme: ${scheme}; }
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; height: auto; overflow: visible; }
+html, body {
+  margin: 0;
+  min-height: 100%;
+  height: auto;
+  width: 100%;
+  overflow-x: visible;
+  overflow-y: visible;
+}
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-/* No internal scroll: parent React panel scrolls so horizontal bar stays in the viewport */
+/* Root fills the iframe width; horizontal scroll lives here when tables are wide */
 .tails-report-preview-root {
   isolation: isolate;
   position: relative;
+  width: 100%;
   min-height: 100%;
   height: auto;
   max-height: none;
   padding: 1rem 1.25rem;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: visible;
+  box-sizing: border-box;
   color: #171717;
   background-color: #fafafa;
 }
@@ -31,17 +41,17 @@ html.dark .tails-report-preview-root {
   color: #e4e4e7;
   background-color: #0f0f12;
 }
-/* Inner wrapper grows with table width so horizontal scroll appears when needed */
+/* Full-width column so narrow reports center visually; wide tables widen the scrollable root */
 .tails-report-preview-inner {
   display: block;
-  width: max-content;
-  min-width: 100%;
-  max-width: none;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .tails-report-preview-root table {
   border-collapse: collapse;
   width: max-content;
-  min-width: 52rem;
+  min-width: 100%;
   max-width: none;
   position: relative;
   z-index: 0;
@@ -84,6 +94,10 @@ html.dark .tails-report-preview-root th {
 .tails-report-preview-root tbody tr:hover,
 .tails-report-preview-root .tails-report tbody tr:hover {
   background-color: transparent !important;
+}
+/* Light document only: templates sometimes inherit “dark UI” grays; keep table body readable */
+html:not(.dark) .tails-report-preview-root .tails-report tbody td {
+  color: #111827;
 }
 `
 
@@ -247,7 +261,7 @@ html.dark .tails-report-preview-root td.metric-name:hover {
 
   return (
     '<!DOCTYPE html><html' +
-    htmlClass +
+    htmlAttrs +
     '><head><meta charset="utf-8"><base target="_blank"><style>' +
     css +
     '</style></head><body><div class="tails-report-preview-root"><div class="tails-report-preview-inner">' +

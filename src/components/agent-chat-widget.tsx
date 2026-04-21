@@ -17,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Textarea } from '@/components/ui/textarea'
+import { ChatTextareaWithMetricsMentions } from '@/components/chat-textarea-with-metrics-mentions'
 import { getApiBaseUrl } from '@/config/env'
 import {
   extractAssistantText,
@@ -339,12 +339,12 @@ export function AgentChatWidget() {
 
           <footer className="border-border/60 bg-muted/15 border-t p-3">
             <div className="flex gap-2">
-              <Textarea
+              <ChatTextareaWithMetricsMentions
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder={apiConfigured ? 'Message…' : 'Configure API URL first'}
+                placeholder={apiConfigured ? 'Message… (@metrics keyword)' : 'Configure API URL first'}
                 disabled={!apiConfigured || loading}
                 rows={2}
                 className="min-h-[2.75rem] resize-none rounded-xl text-sm"
@@ -361,7 +361,8 @@ export function AgentChatWidget() {
               </Button>
             </div>
             <p className="text-muted-foreground mt-2 text-[0.65rem] leading-snug">
-              Enter to send · Shift+Enter for newline
+              Enter to send · Shift+Enter for newline · <span className="text-foreground/90">@metrics</span> + keyword
+              to search metrics (↑↓ Space to select, Insert to add names)
             </p>
           </footer>
         </div>
@@ -384,6 +385,3 @@ export function AgentChatWidget() {
   )
 }
 
-export function openChatWithPrompt(prompt: string) {
-  window.dispatchEvent(new CustomEvent('tails:chat-prompt', { detail: { prompt } }))
-}

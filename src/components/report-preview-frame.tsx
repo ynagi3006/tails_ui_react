@@ -26,6 +26,8 @@ type Props = {
   src: string
   title: string
   onMetricClick?: (payload: MetricClickPayload) => void
+  /** Fixed light shell around the iframe (ignores app light/dark). Use for Report Builder preview. */
+  independentLightChrome?: boolean
 }
 
 /**
@@ -33,7 +35,7 @@ type Props = {
  * Scrolling is on the outer div so wide reports get a horizontal scrollbar at the bottom of the
  * visible preview area.
  */
-export function ReportPreviewFrame({ src, title, onMetricClick }: Props) {
+export function ReportPreviewFrame({ src, title, onMetricClick, independentLightChrome }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const scrollBoxRef = useRef<HTMLDivElement>(null)
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null)
@@ -77,6 +79,8 @@ export function ReportPreviewFrame({ src, title, onMetricClick }: Props) {
     }
 
     const onLoad = () => {
+      const box = scrollBoxRef.current
+      if (box) box.scrollLeft = 0
       scheduleMeasure()
     }
 
@@ -172,13 +176,19 @@ export function ReportPreviewFrame({ src, title, onMetricClick }: Props) {
   return (
     <div
       ref={scrollBoxRef}
-      className="bg-background max-h-[min(88vh,1040px)] overflow-auto overscroll-x-contain rounded-b-2xl"
+      className={
+        independentLightChrome
+          ? 'max-h-[min(88vh,1040px)] overflow-auto overscroll-x-contain rounded-b-2xl bg-zinc-100'
+          : 'bg-background max-h-[min(88vh,1040px)] overflow-auto overscroll-x-contain rounded-b-2xl'
+      }
     >
       <iframe
         ref={iframeRef}
         title={title}
         src={src}
-        className="bg-background max-w-none border-0"
+        className={
+          independentLightChrome ? 'max-w-none border-0 bg-white' : 'bg-background max-w-none border-0'
+        }
         style={iframeStyle}
         sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       />

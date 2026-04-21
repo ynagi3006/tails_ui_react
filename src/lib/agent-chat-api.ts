@@ -20,6 +20,18 @@ export async function postTailsAgentResponse(
   })
 }
 
+/** Dedicated Jinja2 template builder (Report Builder AI tab); same payload shape as ``postTailsAgentResponse``. */
+export async function postJinjaBuilderAgentResponse(
+  input: Array<{ role: string; content: string }>,
+): Promise<unknown> {
+  const model =
+    (import.meta.env.VITE_TAILS_RESPONSES_MODEL as string | undefined)?.trim() || DEFAULT_RESPONSES_MODEL
+  return apiFetchJson<unknown>('/responses/jinja-builder', {
+    method: 'POST',
+    body: JSON.stringify({ model, input }),
+  })
+}
+
 export async function fetchResponsesHelp(): Promise<ResponsesHelpPayload | null> {
   try {
     return await apiFetchJson<ResponsesHelpPayload>('/responses/help')
@@ -28,7 +40,34 @@ export async function fetchResponsesHelp(): Promise<ResponsesHelpPayload | null>
   }
 }
 
+/** First fenced code block from assistant text (for applying Jinja/HTML to the editor). */
+export function extractFirstFencedCode(text: string): string | null {
+  const labeled = /```(?:html|jinja2?|htm|xml)?\s*\n?([\s\S]*?)```/i.exec(text)
+  if (labeled?.[1]) return labeled[1].trim()
+  const generic = /```\s*\n?([\s\S]*?)```/.exec(text)
+  if (generic?.[1]) return generic[1].trim()
+  return null
+}
+
+/** Remove the first markdown fenced block (same fence rules as ``extractFirstFencedCode``). */
+export function stripFirstFencedCode(text: string): string {
+  const labeled = /```(?:html|jinja2?|htm|xml)?\s*\n?[\s\S]*?```/i.exec(text)
+  if (labeled?.[0]) {
+    return (text.slice(0, labeled.index) + text.slice(labeled.index + labeled[0].length))
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+  const generic = /```\s*\n?[\s\S]*?```/.exec(text)
+  if (generic?.[0]) {
+    return (text.slice(0, generic.index) + text.slice(generic.index + generic[0].length))
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+  return text.trim()
+}
+
 /** Parse assistant-visible text from POST /responses JSON (OpenAI-style output array). */
+
 export function extractAssistantText(data: unknown): string {
   const parts: string[] = []
   const d = data as {
