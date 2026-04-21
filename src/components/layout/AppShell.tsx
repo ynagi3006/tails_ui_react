@@ -42,7 +42,7 @@ export function AppShell() {
   return (
     <div className="flex min-h-svh flex-col">
       <header className="bg-background/80 supports-backdrop-filter:bg-background/70 sticky top-0 z-50 border-b border-border/60 backdrop-blur-xl">
-        <div className="mx-auto grid h-[3.25rem] max-w-[min(100%,112rem)] grid-cols-[auto_1fr_auto] items-center gap-2 px-4 sm:gap-4 sm:px-6">
+        <div className="mx-auto grid h-14 max-w-[min(100%,112rem)] grid-cols-[auto_1fr_auto] items-center gap-2 px-4 sm:gap-4 sm:px-6">
           <Link
             to="/"
             aria-label="Tails home"
@@ -51,10 +51,14 @@ export function AppShell() {
             <img
               src="/tails-logo.png"
               alt=""
-              width={112}
-              height={32}
+              width={140}
+              height={40}
               decoding="async"
-              className="h-8 w-auto max-w-[7rem] rounded-lg object-contain shadow-sm ring-1 ring-border/50 bg-zinc-950 sm:max-w-[8.5rem]"
+              className={cn(
+                'h-10 w-auto max-w-[9rem] object-contain sm:max-w-[11rem]',
+                /* Transparent PNG: same flush treatment in light and dark */
+                'rounded-md px-0.5 py-0.5',
+              )}
             />
             <span className="hidden sm:inline">Tails</span>
           </Link>

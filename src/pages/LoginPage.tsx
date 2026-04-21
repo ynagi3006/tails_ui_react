@@ -5,6 +5,7 @@ import { useOktaAuth } from '@/auth/OktaAuthProvider'
 import { getOktaRedirectUri, isOktaBrowserConfigured, isUiAuthDisabled } from '@/config/env'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -28,9 +29,12 @@ export function LoginPage() {
             <img
               src="/tails-logo.png"
               alt=""
-              width={112}
-              height={32}
-              className="mx-auto h-9 w-auto max-w-[9rem] rounded-lg object-contain shadow-sm ring-1 ring-border/50 bg-zinc-950"
+              width={168}
+              height={48}
+              className={cn(
+                'mx-auto h-12 w-auto max-w-[12rem] object-contain sm:h-14 sm:max-w-[14rem]',
+                'rounded-md px-1 py-1',
+              )}
             />
             <CardTitle className="text-xl">Sign in</CardTitle>
             <CardDescription>
@@ -63,9 +67,12 @@ export function LoginPage() {
           <img
             src="/tails-logo.png"
             alt=""
-            width={112}
-            height={32}
-            className="mx-auto h-9 w-auto max-w-[9rem] rounded-lg object-contain shadow-sm ring-1 ring-border/50 bg-zinc-950"
+            width={168}
+            height={48}
+            className={cn(
+              'mx-auto h-12 w-auto max-w-[12rem] object-contain sm:h-14 sm:max-w-[14rem]',
+              'rounded-md px-1 py-1',
+            )}
           />
           <CardTitle className="text-xl">Sign in to Tails</CardTitle>
           <CardDescription>Use your Okta account to access metrics, reports, and internal tools.</CardDescription>
