@@ -1,27 +1,48 @@
-import { useEffect } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 
 import { useOktaAuth } from '@/auth/OktaAuthProvider'
-import { getOktaRedirectUri, isOktaBrowserConfigured, isUiAuthDisabled } from '@/config/env'
+import { getOktaRedirectUri, isUiAuthDisabled } from '@/config/env'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
-export function LoginPage() {
-  const navigate = useNavigate()
-  const okta = useOktaAuth()
+function safePostLoginPath(state: unknown): string {
+  const from = state && typeof state === 'object' && 'from' in state ? (state as { from: unknown }).from : undefined
 
-  useEffect(() => {
-    if (okta.configured && okta.authReady && okta.authenticated) {
-      navigate('/', { replace: true })
-    }
-  }, [okta.authReady, okta.authenticated, okta.configured, navigate])
+  if (typeof from === 'string') {
+    if (!from.startsWith('/') || from.startsWith('//')) return '/'
+    if (from === '/login' || from.startsWith('/login/')) return '/'
+    return from
+  }
+
+  if (from && typeof from === 'object') {
+    const loc = from as { pathname?: unknown; search?: unknown; hash?: unknown }
+    const pathname = typeof loc.pathname === 'string' ? loc.pathname : '/'
+    const search = typeof loc.search === 'string' ? loc.search : ''
+    const hash = typeof loc.hash === 'string' ? loc.hash : ''
+
+    if (!pathname.startsWith('/') || pathname.startsWith('//')) return '/'
+    if (pathname === '/login' || pathname.startsWith('/login/')) return '/'
+
+    return `${pathname}${search}${hash}` || '/'
+  }
+
+  return '/'
+}
+
+export function LoginPage() {
+  const location = useLocation()
+  const okta = useOktaAuth()
+  const [signInError, setSignInError] = useState<string | null>(null)
+
+  const postLoginPath = useMemo(() => safePostLoginPath(location.state), [location.state])
 
   if (isUiAuthDisabled()) {
     return <Navigate to="/" replace />
   }
 
-  if (!isOktaBrowserConfigured() || !okta.configured) {
+  if (!okta.configured) {
     return (
       <div className="bg-background text-foreground flex min-h-svh flex-col items-center justify-center p-6">
         <Card className="w-full max-w-md rounded-2xl border-border/80 shadow-lg">
@@ -60,6 +81,10 @@ export function LoginPage() {
     )
   }
 
+  if (okta.authenticated) {
+    return <Navigate to={postLoginPath} replace />
+  }
+
   return (
     <div className="bg-background text-foreground flex min-h-svh flex-col items-center justify-center p-6">
       <Card className="w-full max-w-md rounded-2xl border-border/80 shadow-lg">
@@ -78,9 +103,25 @@ export function LoginPage() {
           <CardDescription>Use your Okta account to access metrics, reports, and internal tools.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Button className="w-full rounded-xl" type="button" size="lg" onClick={() => void okta.signIn()}>
+          <Button
+            className="w-full rounded-xl"
+            type="button"
+            size="lg"
+            onClick={() => {
+              setSignInError(null)
+              void okta.signIn(postLoginPath).catch((e: unknown) => {
+                console.error('[tails] Okta sign-in failed', e)
+                setSignInError(e instanceof Error ? e.message : String(e))
+              })
+            }}
+          >
             Sign in with Okta
           </Button>
+          {signInError ? (
+            <p className="text-destructive text-center text-xs leading-relaxed" role="alert">
+              {signInError}
+            </p>
+          ) : null}
           <p className="text-muted-foreground text-center text-xs leading-relaxed">
             Redirect URI registered in Okta must include:{' '}
             <span className="text-foreground font-mono break-all">{getOktaRedirectUri()}</span>

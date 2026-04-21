@@ -13,7 +13,7 @@ async function fetchPrincipalJson(): Promise<{ ok: boolean; data: unknown }> {
   if (!root) return { ok: false, data: { error: 'VITE_TAILS_API_URL is not set' } }
   try {
     const r = await fetch(`${root}/api/v1/users/me/principal`, {
-      headers: { Accept: 'application/json', ...getApiAuthHeaders() },
+      headers: { Accept: 'application/json', ...(await getApiAuthHeaders()) },
     })
     const text = await r.text()
     let data: unknown = text

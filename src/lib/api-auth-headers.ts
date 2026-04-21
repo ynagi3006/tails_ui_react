@@ -3,10 +3,12 @@ import { isUiAuthDisabled } from '@/config/env'
 /** Dispatched after Okta login / logout / token renewal so hooks can refetch principal. */
 export const TAILS_AUTH_CHANGED_EVENT = 'tails-auth-changed'
 
-let oktaAccessTokenGetter: (() => string | undefined) | null = null
+type OktaAccessTokenGetter = () => Promise<string | undefined>
+
+let oktaAccessTokenGetter: OktaAccessTokenGetter | null = null
 
 /** Registered by ``OktaAuthProvider`` when Okta env is configured. */
-export function registerOktaAccessTokenGetter(getter: (() => string | undefined) | null): void {
+export function registerOktaAccessTokenGetter(getter: OktaAccessTokenGetter | null): void {
   oktaAccessTokenGetter = getter
 }
 
@@ -44,9 +46,9 @@ function devHeadersWhenUiAuthDisabled(): Record<string, string> {
 }
 
 /** Headers for Tails API calls (Okta Bearer when signed in; dev headers when UI auth is disabled). */
-export function getApiAuthHeaders(): Record<string, string> {
+export async function getApiAuthHeaders(): Promise<Record<string, string>> {
   const dev = devHeadersWhenUiAuthDisabled()
-  const token = oktaAccessTokenGetter?.()
+  const token = oktaAccessTokenGetter ? await oktaAccessTokenGetter() : undefined
   if (token) {
     const h: Record<string, string> = { ...dev }
     h.Authorization = `Bearer ${token}`

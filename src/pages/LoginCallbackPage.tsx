@@ -3,11 +3,19 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { useOktaAuth } from '@/auth/OktaAuthProvider'
 import { isOktaBrowserConfigured, isUiAuthDisabled } from '@/config/env'
-import { emitAuthChanged } from '@/lib/api-auth-headers'
 
+function replaceDocumentToAppHome() {
+  window.location.replace(new URL('/', window.location.origin).href)
+}
+
+/**
+ * UX route only: ``OktaAuthProvider`` already runs ``handleLoginRedirect`` for any registered redirect URI
+ * (including ``/``). Calling it again here caused a second parse on an already-stripped URL →
+ * "Unable to parse a token from the url" and sometimes duplicate code exchange → Okta errors.
+ */
 export function LoginCallbackPage() {
   const navigate = useNavigate()
-  const { configured, oktaAuth } = useOktaAuth()
+  const { configured, oktaAuth, oktaBootstrapped } = useOktaAuth()
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -15,33 +23,30 @@ export function LoginCallbackPage() {
       navigate('/', { replace: true })
       return
     }
-    if (!oktaAuth.isLoginRedirect()) {
-      navigate('/', { replace: true })
+    if (!oktaBootstrapped) {
       return
     }
     let cancelled = false
-    void oktaAuth
-      .handleLoginRedirect()
-      .then(() => {
-        if (cancelled) return
-        emitAuthChanged()
-        navigate('/', { replace: true })
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return
-        setError(e instanceof Error ? e.message : String(e))
-      })
+    void (async () => {
+      const ok = await oktaAuth.isAuthenticated({ onExpiredToken: 'renew' })
+      if (cancelled) return
+      if (ok) {
+        replaceDocumentToAppHome()
+        return
+      }
+      setError('Sign-in did not complete. Try again from the login page.')
+    })()
     return () => {
       cancelled = true
     }
-  }, [navigate, oktaAuth])
+  }, [navigate, oktaAuth, oktaBootstrapped])
 
   if (error) {
     return (
       <div className="bg-background text-foreground flex min-h-svh flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-destructive max-w-md text-sm">Sign-in could not be completed: {error}</p>
-        <Link to="/" className="text-primary text-sm underline underline-offset-4">
-          Back to home
+        <p className="text-destructive max-w-md text-sm">{error}</p>
+        <Link to="/login" className="text-primary text-sm underline underline-offset-4">
+          Back to sign in
         </Link>
       </div>
     )

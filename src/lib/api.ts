@@ -27,7 +27,7 @@ export async function apiFetchJson<T>(path: string, init: RequestInit = {}): Pro
   const url = `${apiV1Base()}${path.startsWith('/') ? path : `/${path}`}`
   const headers = new Headers(init.headers)
   if (!headers.has('Accept')) headers.set('Accept', 'application/json')
-  const auth = getApiAuthHeaders()
+  const auth = await getApiAuthHeaders()
   for (const [k, v] of Object.entries(auth)) {
     if (!headers.has(k)) headers.set(k, v)
   }
