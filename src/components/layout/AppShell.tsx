@@ -1,11 +1,11 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
-import { BarChart3Icon, ChevronDownIcon } from 'lucide-react'
+import { ChevronDownIcon } from 'lucide-react'
 
+import { useOktaAuth } from '@/auth/OktaAuthProvider'
 import { AgentChatWidget } from '@/components/agent-chat-widget'
-import { DevApiIdentityPopover } from '@/components/dev-api-identity'
 import { FeatureRequestFooterTrigger } from '@/components/feature-request-dialog'
 import { ThemeMenu } from '@/components/theme-menu'
-import { getApiBaseUrl } from '@/config/env'
+import { getApiBaseUrl, getOktaRedirectUri } from '@/config/env'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -36,16 +36,26 @@ function navPillClass({ isActive }: { isActive: boolean }) {
 
 export function AppShell() {
   const api = getApiBaseUrl()
-  const { isAdmin, refreshPrincipal } = useTailsPrincipal()
+  const { isAdmin } = useTailsPrincipal()
+  const okta = useOktaAuth()
 
   return (
     <div className="flex min-h-svh flex-col">
       <header className="bg-background/80 supports-backdrop-filter:bg-background/70 sticky top-0 z-50 border-b border-border/60 backdrop-blur-xl">
         <div className="mx-auto grid h-[3.25rem] max-w-[min(100%,112rem)] grid-cols-[auto_1fr_auto] items-center gap-2 px-4 sm:gap-4 sm:px-6">
-          <Link to="/" className="text-foreground flex shrink-0 items-center gap-2.5 font-semibold tracking-tight">
-            <span className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg shadow-sm">
-              <BarChart3Icon className="size-4" aria-hidden />
-            </span>
+          <Link
+            to="/"
+            aria-label="Tails home"
+            className="text-foreground flex shrink-0 items-center gap-2.5 font-semibold tracking-tight"
+          >
+            <img
+              src="/tails-logo.png"
+              alt=""
+              width={112}
+              height={32}
+              decoding="async"
+              className="h-8 w-auto max-w-[7rem] rounded-lg object-contain shadow-sm ring-1 ring-border/50 bg-zinc-950 sm:max-w-[8.5rem]"
+            />
             <span className="hidden sm:inline">Tails</span>
           </Link>
 
@@ -63,6 +73,38 @@ export function AppShell() {
           </nav>
 
           <div className="border-border/60 flex shrink-0 items-center justify-end gap-0.5 border-l pl-2 sm:gap-1 sm:pl-3">
+            {okta.configured ? (
+              okta.authenticated ? (
+                <>
+                  {okta.userLabel ? (
+                    <span
+                      className="text-muted-foreground hidden max-w-[10rem] truncate text-xs sm:inline"
+                      title={okta.userLabel}
+                    >
+                      {okta.userLabel}
+                    </span>
+                  ) : null}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full border-border/70 px-2.5 text-xs"
+                    type="button"
+                    onClick={() => void okta.signOut()}
+                  >
+                    Sign out
+                  </Button>
+                </>
+              ) : (
+                <Button variant="default" size="sm" className="h-8 rounded-full px-2.5 text-xs" asChild>
+                  <Link
+                    to="/login"
+                    title={`Add this exact URL under Okta → Applications → your SPA → Sign-in redirect URIs: ${getOktaRedirectUri()}`}
+                  >
+                    Sign in
+                  </Link>
+                </Button>
+              )
+            ) : null}
             <ThemeMenu />
             <DropdownMenu>
               <DropdownMenuTrigger className="inline-flex" asChild>
@@ -98,7 +140,6 @@ export function AppShell() {
                 ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
-            <DevApiIdentityPopover onIdentityChange={refreshPrincipal} />
           </div>
         </div>
       </header>

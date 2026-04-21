@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { getApiBaseUrl } from '@/config/env'
-import { DEV_AUTH_STORAGE_KEYS, getDevAuthHeaders } from '@/lib/dev-auth-headers'
+import { getApiBaseUrl, isUiAuthDisabled } from '@/config/env'
+import { getApiAuthHeaders, TAILS_AUTH_CHANGED_EVENT } from '@/lib/api-auth-headers'
 
 type PrincipalPayload = {
   is_admin?: boolean
@@ -13,7 +13,7 @@ async function fetchPrincipalJson(): Promise<{ ok: boolean; data: unknown }> {
   if (!root) return { ok: false, data: { error: 'VITE_TAILS_API_URL is not set' } }
   try {
     const r = await fetch(`${root}/api/v1/users/me/principal`, {
-      headers: { Accept: 'application/json', ...getDevAuthHeaders() },
+      headers: { Accept: 'application/json', ...getApiAuthHeaders() },
     })
     const text = await r.text()
     let data: unknown = text
@@ -29,6 +29,10 @@ async function fetchPrincipalJson(): Promise<{ ok: boolean; data: unknown }> {
 }
 
 function applyPrincipalPayload(ok: boolean, data: unknown, setIsAdmin: (v: boolean) => void) {
+  if (isUiAuthDisabled()) {
+    setIsAdmin(true)
+    return
+  }
   if (ok && data && typeof data === 'object' && data !== null) {
     setIsAdmin((data as PrincipalPayload).is_admin === true)
   } else {
@@ -37,7 +41,9 @@ function applyPrincipalPayload(ok: boolean, data: unknown, setIsAdmin: (v: boole
 }
 
 export function useTailsPrincipal() {
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(() =>
+    typeof window !== 'undefined' ? isUiAuthDisabled() : false,
+  )
 
   const refreshPrincipal = useCallback(async () => {
     const { ok, data } = await fetchPrincipalJson()
@@ -56,17 +62,13 @@ export function useTailsPrincipal() {
   }, [])
 
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (
-        e.key === DEV_AUTH_STORAGE_KEYS.email ||
-        e.key === DEV_AUTH_STORAGE_KEYS.sub ||
-        e.key === DEV_AUTH_STORAGE_KEYS.token
-      ) {
-        void refreshPrincipal()
-      }
+    const onAuthChanged = () => {
+      void refreshPrincipal()
     }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    window.addEventListener(TAILS_AUTH_CHANGED_EVENT, onAuthChanged)
+    return () => {
+      window.removeEventListener(TAILS_AUTH_CHANGED_EVENT, onAuthChanged)
+    }
   }, [refreshPrincipal])
 
   return { isAdmin, refreshPrincipal }

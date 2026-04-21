@@ -16,7 +16,7 @@ function isSummaryHeading(text: string): boolean {
   return /overall|assessment|summary|takeaway|conclusion|key focus/i.test(text)
 }
 
-function renderBlock(block: Block, i: number, blocks: Block[]): ReactNode {
+function renderBlock(block: Block, i: number, _blocks: Block[]): ReactNode {
   switch (block.type) {
     case 'heading':
       if (block.level === 1)

@@ -17,7 +17,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Use the header **Dev identity** popover to set the same `localStorage` keys as `tails_ui` (`tailsDevEmail`, `tailsDevSub`, `tailsOktaAccessToken`). **Save** / **Test** hits `/users/me/principal` and `/users/me` and refreshes **Admin** in the Docs menu when `is_admin` is true.
+When `VITE_OKTA_ISSUER` and `VITE_OKTA_CLIENT_ID` are set, all app routes require a session: unauthenticated users are sent to **`/login`**. Use **Sign in** in the header (same page) for Okta (PKCE); after success you land on the home page. Register redirect URI `/login/callback` on the Okta SPA app. Without Okta env, routes stay open for local development. Set **`VITE_TAILS_AUTH_DISABLED=true`** to turn off Okta and guards while issuer/client id stay in `.env` (restart Vite). The SPA then sends **no Bearer**; use API **`TAILS_AUTH_MODE=off`** (simplest: full access and admin in the API), or **`dev_headers`** plus **`VITE_DEV_TAILS_PROFILE_EMAIL`** (email only; the API resolves the Dynamo user). With auth disabled, the UI assumes **admin** for the Docs → Admin link. See `.env.example`.
 
 ## Scripts
 

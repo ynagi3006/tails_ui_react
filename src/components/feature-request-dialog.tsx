@@ -13,9 +13,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useOktaAuth } from '@/auth/OktaAuthProvider'
 import { getApiBaseUrl } from '@/config/env'
 import { apiFetchJson } from '@/lib/api'
-import { loadDevAuthFromStorage } from '@/lib/dev-auth-headers'
 import { cn } from '@/lib/utils'
 
 type FeatureRequestResponse = {
@@ -30,6 +30,7 @@ const selectClass = cn(
 )
 
 export function FeatureRequestFooterTrigger() {
+  const okta = useOktaAuth()
   const hasApi = Boolean(getApiBaseUrl())
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
@@ -50,9 +51,9 @@ export function FeatureRequestFooterTrigger() {
     setRequestType('Feature')
     setDescription('')
     setCapitalizable(false)
-    const dev = loadDevAuthFromStorage()
-    setEmail(dev.email || '')
-  }, [open])
+    const label = (okta.userLabel || '').trim()
+    setEmail(label.includes('@') ? label : '')
+  }, [open, okta.userLabel])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

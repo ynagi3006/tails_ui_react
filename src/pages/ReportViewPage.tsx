@@ -86,7 +86,6 @@ export function ReportViewPage() {
 
   const [loadingMeta, setLoadingMeta] = useState(true)
   const [loadingEditions, setLoadingEditions] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [editionsError, setEditionsError] = useState<string | null>(null)
 
   const [templateDraft, setTemplateDraft] = useState('')

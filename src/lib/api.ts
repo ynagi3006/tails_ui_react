@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from '@/config/env'
-import { getDevAuthHeaders } from '@/lib/dev-auth-headers'
+import { getApiAuthHeaders } from '@/lib/api-auth-headers'
 
 function apiV1Base(): string {
   const root = getApiBaseUrl()
@@ -22,13 +22,13 @@ async function readErrorMessage(res: Response): Promise<string> {
   return text || `${res.status} ${res.statusText}`
 }
 
-/** GET/POST JSON to Tails API with dev auth headers when present. */
+/** GET/POST JSON to Tails API with Okta Bearer when signed in. */
 export async function apiFetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const url = `${apiV1Base()}${path.startsWith('/') ? path : `/${path}`}`
   const headers = new Headers(init.headers)
   if (!headers.has('Accept')) headers.set('Accept', 'application/json')
-  const dev = getDevAuthHeaders()
-  for (const [k, v] of Object.entries(dev)) {
+  const auth = getApiAuthHeaders()
+  for (const [k, v] of Object.entries(auth)) {
     if (!headers.has(k)) headers.set(k, v)
   }
   if (init.body != null && !headers.has('Content-Type')) {
