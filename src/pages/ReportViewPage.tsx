@@ -32,7 +32,6 @@ import { ReportAnalysisPanel } from '@/components/report-analysis-panel'
 import { ReportPreviewFrame, type MetricClickPayload } from '@/components/report-preview-frame'
 import { apiFetchJson, getClassicUiReportUrl } from '@/lib/api'
 import { formatDate, formatDateOnly } from '@/lib/format-date'
-import { useTheme } from '@/hooks/use-theme'
 import { useHtmlBlobUrl } from '@/lib/html-blob-url'
 import { cn } from '@/lib/utils'
 
@@ -75,7 +74,6 @@ function reportVersionIdFromReport(r: ReportDetail | null): string {
 
 export function ReportViewPage() {
   const { reportId = '' } = useParams<{ reportId: string }>()
-  const { resolved: themeResolved } = useTheme()
   const [pageTab, setPageTab] = useState<PageTab>('preview')
 
   const [report, setReport] = useState<ReportDetail | null>(null)
@@ -106,7 +104,8 @@ export function ReportViewPage() {
 
   const [calendarOpen, setCalendarOpen] = useState(false)
 
-  const editionIframeUrl = useHtmlBlobUrl(editionHtml, { theme: themeResolved })
+  /* Edition HTML is authored for light/print; keep blob + iframe chrome off app theme (page chrome still follows theme). */
+  const editionIframeUrl = useHtmlBlobUrl(editionHtml, { theme: 'light' })
 
   const reportVersionId = reportVersionIdFromReport(report)
 
@@ -712,6 +711,7 @@ export function ReportViewPage() {
                   key={activeIframeUrl}
                   src={activeIframeUrl}
                   title="Edition preview"
+                  independentLightChrome
                   onMetricClick={handleMetricClick}
                 />
               ) : selectedEditionId ? (

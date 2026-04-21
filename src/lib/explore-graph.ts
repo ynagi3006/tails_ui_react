@@ -6,6 +6,8 @@ export type ExploreApiNode = {
   name: string
   tags: string[]
   owned_by?: string
+  /** Logical metric id (matches metric favorites); only on metric nodes. Node `id` is metric_version_id. */
+  metric_id?: string
   metric_count?: number
   datapoint_count?: number
   dimensions?: string[]
@@ -13,10 +15,10 @@ export type ExploreApiNode = {
 
 export type ExploreApiEdge = { source: string; target: string }
 
-export const REPORT_W = 228
-export const REPORT_H = 58
-export const METRIC_W = 196
-export const METRIC_H = 46
+export const REPORT_W = 220
+export const REPORT_H = 64
+export const METRIC_W = 188
+export const METRIC_H = 52
 
 const GOLDEN_ANGLE = 2.39996322972865332
 
@@ -48,12 +50,16 @@ export function parseExploreGraph(data: unknown): { nodes: ExploreApiNode[]; edg
       if (!id) continue
       const tagsRaw = r.tags
       const tags = Array.isArray(tagsRaw) ? (tagsRaw as unknown[]).map(String) : []
+      const midRaw = r.metric_id ?? r.metricId ?? r.METRIC_ID
+      const logicalMetricId =
+        t === 'metric' && midRaw != null && String(midRaw).trim() ? String(midRaw).trim() : undefined
       nodes.push({
         id,
         type: t,
         name: String(r.name ?? 'Unnamed').trim() || 'Unnamed',
         tags,
         owned_by: r.owned_by != null ? String(r.owned_by) : undefined,
+        metric_id: logicalMetricId,
         metric_count: typeof r.metric_count === 'number' ? r.metric_count : undefined,
         datapoint_count: typeof r.datapoint_count === 'number' ? r.datapoint_count : undefined,
         dimensions: Array.isArray(r.dimensions) ? (r.dimensions as unknown[]).map(String) : undefined,
@@ -71,6 +77,48 @@ export function parseExploreGraph(data: unknown): { nodes: ExploreApiNode[]; edg
     }
   }
   return { nodes, edges }
+}
+
+/**
+ * Subgraph from starred seeds: favorited reports, favorited metrics (by logical `metric_id`),
+ * then every metric linked to a kept report and every report linked to a kept metric (repeat until stable).
+ * Edges are report → metric (`source` report, `target` metric version).
+ */
+export function expandExploreGraphFromFavorites(
+  nodes: ExploreApiNode[],
+  edges: ExploreApiEdge[],
+  favoriteReportIds: Set<string>,
+  favoriteMetricIds: Set<string>,
+): { nodes: ExploreApiNode[]; edges: ExploreApiEdge[] } {
+  const keptIds = new Set<string>()
+  for (const n of nodes) {
+    if (n.type === 'report' && favoriteReportIds.has(n.id)) {
+      keptIds.add(n.id)
+    }
+    if (n.type === 'metric') {
+      const logical = (n.metric_id ?? '').trim()
+      if (logical && favoriteMetricIds.has(logical)) {
+        keptIds.add(n.id)
+      }
+    }
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const e of edges) {
+      if (keptIds.has(e.source) && !keptIds.has(e.target)) {
+        keptIds.add(e.target)
+        changed = true
+      }
+      if (keptIds.has(e.target) && !keptIds.has(e.source)) {
+        keptIds.add(e.source)
+        changed = true
+      }
+    }
+  }
+  const filteredEdges = edges.filter((ed) => keptIds.has(ed.source) && keptIds.has(ed.target))
+  const filteredNodes = nodes.filter((n) => keptIds.has(n.id))
+  return { nodes: filteredNodes, edges: filteredEdges }
 }
 
 /** Nodes whose tags match + neighbors on an edge (classic behavior). */
@@ -307,11 +355,11 @@ export function layoutExploreFlow(
     source: e.source,
     target: e.target,
     type: 'default',
-    animated: true,
+    animated: false,
     style: {
-      stroke: 'var(--primary)',
-      strokeOpacity: 0.35,
-      strokeWidth: 1.5,
+      stroke: 'var(--border)',
+      strokeOpacity: 0.85,
+      strokeWidth: 1,
     },
   }))
 

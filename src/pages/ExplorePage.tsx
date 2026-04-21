@@ -40,12 +40,15 @@ import {
 } from '@/components/ui/table'
 import { apiFetchJson, getClassicUiExploreUrl } from '@/lib/api'
 import {
+  expandExploreGraphFromFavorites,
   layoutExploreFlow,
   parseExploreGraph,
   visibleExploreSubgraph,
   type ExploreApiNode,
 } from '@/lib/explore-graph'
 import { cn } from '@/lib/utils'
+import { useMetricFavorites } from '@/hooks/use-metric-favorites'
+import { useReportFavorites } from '@/hooks/use-report-favorites'
 
 type ViewMode = 'graph' | 'table'
 
@@ -58,17 +61,24 @@ function ExploreReportNode({ data, selected }: NodeProps) {
       <Handle
         type="source"
         position={sourceHandle}
-        className="!bg-primary !border-background !h-2.5 !w-2.5 !border-2 shadow-[0_0_12px_var(--primary)]"
+        className="size-2.5 border-2 border-primary-foreground/25 bg-primary shadow-sm"
       />
       <div
         className={cn(
-          'from-primary/20 via-primary/8 border-primary/55 to-card/90 w-[228px] max-w-[min(228px,88vw)] rounded-2xl border-2 bg-gradient-to-br px-3.5 py-2.5 text-left shadow-[0_4px_24px_oklch(0.52_0.22_290/0.12)] transition-all duration-200',
-          selected && 'ring-primary/50 scale-[1.02] ring-2 ring-offset-2 ring-offset-background',
+          'text-card-foreground w-[220px] max-w-[min(220px,88vw)] rounded-xl border border-primary/25 bg-primary/7 py-2 pl-3 pr-3 text-left shadow-sm transition-[box-shadow,border-color,background-color] duration-150 dark:border-primary/35 dark:bg-primary/15',
+          selected
+            ? 'border-primary/55 bg-primary/11 shadow-md ring-2 ring-primary/25 dark:ring-primary/35'
+            : 'hover:border-primary/40 hover:bg-primary/10',
         )}
       >
-        <p className="text-foreground text-[0.8rem] leading-snug font-semibold tracking-tight break-words">{label}</p>
+        <div className="mb-1 flex items-center gap-2">
+          <span className="bg-primary/18 text-primary dark:bg-primary/25 dark:text-primary-foreground inline-flex items-center rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold tracking-wide uppercase">
+            Report
+          </span>
+        </div>
+        <p className="text-foreground text-[0.8125rem] leading-snug font-semibold tracking-tight wrap-break-word">{label}</p>
         {raw.metric_count != null ? (
-          <p className="text-muted-foreground mt-1 text-[0.65rem] tabular-nums">
+          <p className="text-primary/80 dark:text-primary-foreground/80 mt-1 text-[0.6875rem] tabular-nums">
             {raw.metric_count} metric{raw.metric_count === 1 ? '' : 's'}
           </p>
         ) : null}
@@ -85,15 +95,24 @@ function ExploreMetricNode({ data, selected }: NodeProps) {
       <Handle
         type="target"
         position={targetHandle}
-        className="!bg-accent !border-background !h-2.5 !w-2.5 !border-2 shadow-[0_0_10px_var(--accent)]"
+        className="size-2.5 border-2 border-teal-950/20 bg-teal-600 shadow-sm dark:border-teal-950/40 dark:bg-teal-400"
       />
       <div
         className={cn(
-          'border-border/80 from-card/95 to-muted/40 w-[196px] max-w-[min(196px,88vw)] rounded-2xl border bg-gradient-to-b px-3 py-2.5 text-left shadow-[0_2px_16px_oklch(0_0_0/0.06)] transition-all duration-200 dark:shadow-[0_2px_20px_oklch(0_0_0/0.25)]',
-          selected && 'ring-accent/40 scale-[1.02] ring-2 ring-offset-2 ring-offset-background',
+          'w-[188px] max-w-[min(188px,88vw)] rounded-md border border-teal-700/25 bg-teal-500/8 py-2 pl-2.5 pr-2.5 text-left shadow-sm transition-[box-shadow,border-color,background-color] duration-150 dark:border-teal-400/30 dark:bg-teal-400/12',
+          selected
+            ? 'border-teal-600/50 bg-teal-500/14 shadow-md ring-2 ring-teal-600/25 dark:border-teal-400/55 dark:bg-teal-400/18 dark:ring-teal-400/30'
+            : 'hover:border-teal-600/40 hover:bg-teal-500/12 dark:hover:border-teal-400/45',
         )}
       >
-        <p className="text-foreground text-[0.75rem] leading-snug font-semibold tracking-tight break-words">{label}</p>
+        <div className="mb-1">
+          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[0.625rem] font-semibold tracking-wide text-teal-900 uppercase bg-teal-600/15 dark:bg-teal-400/20 dark:text-teal-50">
+            Metric
+          </span>
+        </div>
+        <p className="text-teal-950 dark:text-teal-50 text-[0.75rem] leading-snug font-medium tracking-tight wrap-break-word">
+          {label}
+        </p>
       </div>
     </>
   )
@@ -118,10 +137,10 @@ function ExploreFlowPanel({
   busy: boolean
 }) {
   return (
-    <Panel position="top-right" className="m-2 max-w-[min(100vw-1rem,320px)]">
-      <div className="border-border/70 bg-card/95 w-full space-y-3 rounded-xl border p-3 shadow-lg backdrop-blur-sm">
+    <Panel position="top-right" className="m-2 max-w-[min(100vw-1rem,280px)]">
+      <div className="border-border/60 bg-card w-full space-y-3 rounded-lg border p-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg" onClick={onReset}>
+          <Button type="button" variant="outline" size="sm" className="h-8 rounded-md" onClick={onReset}>
             <RotateCcwIcon className="size-3.5" />
             Reset
           </Button>
@@ -129,9 +148,17 @@ function ExploreFlowPanel({
         {selected ? (
           <div className="space-y-2 text-sm">
             <div>
-              <p className="text-muted-foreground text-[0.65rem] font-medium tracking-wide uppercase">Selected</p>
+              <p className="text-muted-foreground text-[0.625rem] font-medium tracking-wide uppercase">Selected</p>
               <p className="text-foreground font-medium leading-snug">{selected.name}</p>
-              <Badge variant="secondary" className="mt-1 rounded-md capitalize">
+              <Badge
+                variant="outline"
+                className={cn(
+                  'mt-1 rounded-md border capitalize',
+                  selected.type === 'report'
+                    ? 'border-primary/35 bg-primary/10 text-primary dark:border-primary/45 dark:bg-primary/20 dark:text-primary-foreground'
+                    : 'border-teal-600/40 bg-teal-500/10 text-teal-900 dark:border-teal-400/45 dark:bg-teal-400/15 dark:text-teal-50',
+                )}
+              >
                 {selected.type}
               </Badge>
             </div>
@@ -164,7 +191,7 @@ function ExploreFlowPanel({
             <Button
               type="button"
               size="sm"
-              className="w-full rounded-lg"
+              className="w-full rounded-md"
               disabled={busy}
               onClick={() =>
                 selected.type === 'report' ? onOpenReport(selected.id) : onOpenMetric(selected.id)
@@ -183,6 +210,8 @@ function ExplorePageInner() {
   const navigate = useNavigate()
   const rf = useReactFlow()
   const classicExplore = getClassicUiExploreUrl()
+  const { ids: favoriteReportIds } = useReportFavorites()
+  const { ids: favoriteMetricIds } = useMetricFavorites()
 
   const [fullNodes, setFullNodes] = useState<ExploreApiNode[]>([])
   const [fullEdges, setFullEdges] = useState<{ source: string; target: string }[]>([])
@@ -220,15 +249,27 @@ function ExplorePageInner() {
     void load()
   }, [load])
 
+  const { nodes: favNodes, edges: favEdges } = useMemo(
+    () => expandExploreGraphFromFavorites(fullNodes, fullEdges, favoriteReportIds, favoriteMetricIds),
+    [fullNodes, fullEdges, favoriteReportIds, favoriteMetricIds],
+  )
+
   const visible = useMemo(
-    () => visibleExploreSubgraph(fullNodes, fullEdges, tagApplied, focusId),
-    [fullNodes, fullEdges, tagApplied, focusId],
+    () => visibleExploreSubgraph(favNodes, favEdges, tagApplied, focusId),
+    [favNodes, favEdges, tagApplied, focusId],
   )
 
   const selectedNode = useMemo(
-    () => (selectedId ? fullNodes.find((n) => n.id === selectedId) ?? null : null),
-    [fullNodes, selectedId],
+    () => (selectedId ? favNodes.find((n) => n.id === selectedId) ?? null : null),
+    [favNodes, selectedId],
   )
+
+  useEffect(() => {
+    if (!selectedId) return
+    if (favNodes.some((n) => n.id === selectedId)) return
+    setSelectedId(null)
+    setFocusId(null)
+  }, [selectedId, favNodes])
 
   useEffect(() => {
     const { nodes: laidOutNodes, edges: laidOutEdges } = layoutExploreFlow(visible.nodes, visible.edges)
@@ -294,12 +335,16 @@ function ExplorePageInner() {
   )
 
   const tableRows = useMemo(() => {
-    const { nodes: n } = visibleExploreSubgraph(fullNodes, fullEdges, tagApplied, focusId)
+    const { nodes: n } = visibleExploreSubgraph(favNodes, favEdges, tagApplied, focusId)
     return [...n].sort((a, b) => {
       if (a.type !== b.type) return a.type === 'report' ? -1 : 1
       return a.name.localeCompare(b.name)
     })
-  }, [fullNodes, fullEdges, tagApplied, focusId])
+  }, [favNodes, favEdges, tagApplied, focusId])
+
+  const hasAnyFavorites = favoriteReportIds.size > 0 || favoriteMetricIds.size > 0
+  const emptyNoFavorites =
+    !loading && fullNodes.length > 0 && favNodes.length === 0 && !hasAnyFavorites
 
   return (
     <div className="space-y-6">
@@ -322,25 +367,25 @@ function ExplorePageInner() {
         }
       />
 
-      <div className="border-border/60 bg-muted/25 flex flex-wrap items-center gap-2 rounded-full border p-1">
+      <div className="bg-muted/30 flex flex-wrap items-center gap-0.5 rounded-lg border border-border/60 p-0.5">
         <Button
           type="button"
           size="sm"
           variant={view === 'graph' ? 'secondary' : 'ghost'}
-          className="h-9 rounded-full px-4"
+          className="h-8 rounded-md px-3.5"
           onClick={() => setView('graph')}
         >
-          <NetworkIcon className="mr-1.5 size-3.5 opacity-80" />
+          <NetworkIcon className="mr-1.5 size-3.5 opacity-70" />
           Graph
         </Button>
         <Button
           type="button"
           size="sm"
           variant={view === 'table' ? 'secondary' : 'ghost'}
-          className="h-9 rounded-full px-4"
+          className="h-8 rounded-md px-3.5"
           onClick={() => setView('table')}
         >
-          <TableIcon className="mr-1.5 size-3.5 opacity-80" />
+          <TableIcon className="mr-1.5 size-3.5 opacity-70" />
           Table
         </Button>
       </div>
@@ -368,15 +413,21 @@ function ExplorePageInner() {
             </Button>
           </div>
         </div>
-        <div className="text-muted-foreground flex flex-col gap-1 text-xs sm:items-end">
-          <span className="flex items-center gap-1.5">
-            <span className="border-primary/60 bg-primary/25 size-2.5 rounded-full border-2 shadow-[0_0_8px_var(--primary)]" aria-hidden />
-            Reports <span className="text-muted-foreground/80 font-normal">(center hub)</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="border-border size-2.5 rounded-md border-2 bg-gradient-to-br from-card to-muted" aria-hidden />
-            Metrics <span className="text-muted-foreground/80 font-normal">(around · can link to multiple reports)</span>
-          </span>
+        <div className="text-muted-foreground max-w-sm space-y-1 text-xs leading-relaxed sm:text-right">
+          <p>
+            Built from starred reports and metrics, then expanded: metrics used by those reports, and other reports
+            that share those metrics. Reports cluster toward the center; metrics fan outward.
+          </p>
+          <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+            <span className="text-primary inline-flex items-center gap-1.5 font-medium">
+              <span className="bg-primary size-2 rounded-sm shadow-sm ring-1 ring-primary/30" aria-hidden />
+              Report
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-medium text-teal-800 dark:text-teal-300">
+              <span className="size-2 rounded-sm bg-teal-600 shadow-sm ring-1 ring-teal-600/35 dark:bg-teal-400" aria-hidden />
+              Metric
+            </span>
+          </div>
         </div>
       </div>
 
@@ -392,20 +443,35 @@ function ExplorePageInner() {
       {loading ? (
         <Skeleton className="h-[min(80vh,900px)] min-h-[480px] w-full rounded-2xl" />
       ) : view === 'graph' ? (
-        fullNodes.length === 0 ? (
-          <div className="border-border/70 text-muted-foreground rounded-2xl border border-dashed px-6 py-16 text-center text-sm">
-            No reports or metrics linked in the graph yet.
+        favNodes.length === 0 ? (
+          <div className="border-border/70 text-muted-foreground space-y-3 rounded-2xl border border-dashed px-6 py-16 text-center text-sm">
+            {fullNodes.length === 0 ? (
+              <p>No reports or metrics linked in the graph yet.</p>
+            ) : emptyNoFavorites ? (
+              <>
+                <p>This map needs at least one starred report or metric to start from.</p>
+                <p>
+                  Open{' '}
+                  <Link className="text-foreground font-medium underline underline-offset-4" to="/metrics">
+                    Metrics
+                  </Link>{' '}
+                  or{' '}
+                  <Link className="text-foreground font-medium underline underline-offset-4" to="/reports">
+                    Reports
+                  </Link>{' '}
+                  and tap the heart on a report you care about (or a metric). Linked metrics and related reports appear
+                  automatically.
+                </p>
+              </>
+            ) : (
+              <p>
+                None of your starred reports or metrics appear in the catalog graph yet. Confirm report IDs match the
+                catalog, star a metric that appears in mappings, or refresh after new data loads.
+              </p>
+            )}
           </div>
         ) : (
-          <div className="border-border/70 relative mx-auto h-[min(82vh,920px)] min-h-[520px] w-full max-w-[1680px] overflow-hidden rounded-2xl border shadow-lg">
-            <div
-              className="pointer-events-none absolute inset-0 rounded-2xl opacity-90"
-              style={{
-                background:
-                  'radial-gradient(ellipse 55% 45% at 50% 48%, var(--primary) 0%, transparent 62%), radial-gradient(ellipse 100% 80% at 50% 50%, var(--muted) 0%, var(--background) 70%)',
-              }}
-              aria-hidden
-            />
+          <div className="border-border/80 relative mx-auto h-[min(82vh,920px)] min-h-[520px] w-full max-w-[1680px] overflow-hidden rounded-xl border bg-muted/20 shadow-sm">
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -419,20 +485,20 @@ function ExplorePageInner() {
               minZoom={0.02}
               maxZoom={2}
               proOptions={{ hideAttribution: true }}
-              className="relative z-[1] bg-transparent"
+              className="bg-transparent"
             >
-              <Panel position="top-left" className="pointer-events-none m-3 max-w-[13rem]">
-                <div className="border-border/60 bg-card/85 text-muted-foreground rounded-xl border px-3 py-2.5 text-[0.7rem] leading-snug shadow-md backdrop-blur-md">
-                  <p className="text-foreground font-medium">Radial map</p>
-                  <p>Purple hub = reports. Outer cards = metrics. Shared metrics sit between their reports.</p>
-                </div>
-              </Panel>
-              <Background gap={28} size={1} className="!bg-transparent" color="var(--border)" />
-              <Controls className="!border-border !bg-card/95 !shadow-md" />
+              <Background gap={36} size={0.85} className="bg-transparent" color="var(--border)" />
+              <Controls className="rounded-lg border border-border/70 bg-card shadow-sm" />
               <MiniMap
-                className="!border-border !bg-card/90"
-                nodeColor={(n) => (n.type === 'exploreReport' ? 'var(--primary)' : 'var(--accent)')}
-                maskColor="oklch(0.2 0.02 280 / 0.12)"
+                className="rounded-md border border-border/60 bg-card/90 shadow-sm"
+                style={{ width: 112, height: 72 }}
+                pannable
+                zoomable
+                nodeStrokeWidth={1}
+                nodeColor={(n) =>
+                  n.type === 'exploreReport' ? 'var(--primary)' : 'oklch(0.55 0.14 180)'
+                }
+                maskColor="oklch(0.5 0.02 280 / 0.08)"
               />
               <ExploreFlowPanel
                 selected={selectedNode}
@@ -444,9 +510,28 @@ function ExplorePageInner() {
             </ReactFlow>
           </div>
         )
-      ) : fullNodes.length === 0 ? (
-        <div className="border-border/70 text-muted-foreground rounded-2xl border border-dashed px-6 py-16 text-center text-sm">
-          No rows to show.
+      ) : favNodes.length === 0 ? (
+        <div className="border-border/70 text-muted-foreground space-y-3 rounded-2xl border border-dashed px-6 py-16 text-center text-sm">
+          {fullNodes.length === 0 ? (
+            <p>No rows to show.</p>
+          ) : emptyNoFavorites ? (
+            <>
+              <p>The table lists the same subgraph as the graph (starred seeds plus connections).</p>
+              <p>
+                Add hearts on{' '}
+                <Link className="text-foreground font-medium underline underline-offset-4" to="/metrics">
+                  Metrics
+                </Link>{' '}
+                or{' '}
+                <Link className="text-foreground font-medium underline underline-offset-4" to="/reports">
+                  Reports
+                </Link>
+                .
+              </p>
+            </>
+          ) : (
+            <p>None of your starred items appear in the loaded graph yet.</p>
+          )}
         </div>
       ) : (
         <div className="border-border/70 overflow-hidden rounded-2xl border shadow-sm">
@@ -471,7 +556,15 @@ function ExplorePageInner() {
                     }}
                   >
                     <TableCell>
-                      <Badge variant={row.type === 'report' ? 'default' : 'secondary'} className="rounded-md capitalize">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'rounded-md capitalize',
+                          row.type === 'report'
+                            ? 'border-primary/35 bg-primary/10 text-primary dark:border-primary/45 dark:bg-primary/20 dark:text-primary-foreground'
+                            : 'border-teal-600/40 bg-teal-500/10 text-teal-900 dark:border-teal-400/45 dark:bg-teal-400/15 dark:text-teal-50',
+                        )}
+                      >
                         {row.type}
                       </Badge>
                     </TableCell>
@@ -503,7 +596,7 @@ function ExplorePageInner() {
         </div>
       )}
 
-      {view === 'table' && fullNodes.length > 0 ? (
+      {view === 'table' && favNodes.length > 0 ? (
         <p className="text-muted-foreground text-xs">
           Click a row to focus that node in the graph view. Use Open to navigate.
         </p>
