@@ -7,6 +7,7 @@ import {
   ExternalLinkIcon,
   HeartIcon,
   LayoutGridIcon,
+  StarIcon,
   SparklesIcon,
   WrenchIcon,
 } from 'lucide-react'
@@ -124,14 +125,14 @@ function CompactReportCard({
             variant="ghost"
             size="icon-sm"
             className="pointer-events-auto shrink-0"
-            aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
+            aria-label={favorited ? 'Unstar report' : 'Star report'}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
               onToggleFavorite()
             }}
           >
-            <HeartIcon className={cn('size-4', favorited && 'fill-primary text-primary')} />
+            <StarIcon className={cn('size-4', favorited && 'fill-primary text-primary')} />
           </Button>
         </div>
         {r.latestEditionCommonDate ? (
@@ -386,13 +387,13 @@ export function HomePage() {
             </Button>
             {favoriteCount > 0 ? (
               <Badge variant="secondary" className="rounded-full px-3 py-1 font-normal">
-                <HeartIcon className="mr-1 size-3 fill-primary text-primary" />
+                <StarIcon className="mr-1 size-3 fill-primary text-primary" />
                 {favoriteCount} starred report{favoriteCount === 1 ? '' : 's'}
               </Badge>
             ) : null}
             {metricFavoriteCount > 0 ? (
               <Badge variant="secondary" className="rounded-full px-3 py-1 font-normal">
-                <BarChart3Icon className="text-sky-600 dark:text-sky-400 mr-1 size-3" />
+                <HeartIcon className="mr-1 size-3 fill-primary text-primary" />
                 {metricFavoriteCount} metric{metricFavoriteCount === 1 ? '' : 's'}
               </Badge>
             ) : null}
@@ -485,7 +486,7 @@ export function HomePage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-foreground flex items-center gap-2 text-lg font-semibold tracking-tight">
-              <HeartIcon className="text-primary size-5" />
+              <StarIcon className="text-primary size-5" />
               Starred reports
             </h2>
             <p className="text-muted-foreground mt-1 text-sm">Your pinned set — scroll sideways on small screens.</p>
@@ -509,7 +510,7 @@ export function HomePage() {
               <Link to="/reports" className="text-primary font-medium underline-offset-4 hover:underline">
                 catalog
               </Link>{' '}
-              or any report card and tap the heart.
+              or any report card and tap the star.
             </CardContent>
           </Card>
         ) : (
@@ -531,7 +532,7 @@ export function HomePage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-foreground flex items-center gap-2 text-lg font-semibold tracking-tight">
-              <BarChart3Icon className="text-sky-600 dark:text-sky-400 size-5" aria-hidden />
+              <HeartIcon className="text-primary size-5" aria-hidden />
               Favorite metrics
             </h2>
             <p className="text-muted-foreground mt-1 text-sm">Metrics you’ve hearted — scroll sideways on small screens.</p>

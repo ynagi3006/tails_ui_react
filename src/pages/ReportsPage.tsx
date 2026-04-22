@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { HeartIcon, SearchIcon } from 'lucide-react'
+import { SearchIcon, StarIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { CatalogLayoutToggle } from '@/components/catalog-layout-toggle'
@@ -281,7 +281,7 @@ export function ReportsPage() {
                           <span className="pt-1 text-xs whitespace-nowrap tabular-nums">{formatDate(r.created_at)}</span>
                           <div className="text-muted-foreground flex shrink-0">
                             <IconHoverTip
-                              title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                              title={has(r.id) ? 'Unstar report' : 'Star report'}
                               caption={r.name}
                               side="left"
                             >
@@ -290,10 +290,10 @@ export function ReportsPage() {
                                 variant="ghost"
                                 size="icon-sm"
                                 className="hover:text-primary size-8 rounded-lg"
-                                aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                                aria-label={has(r.id) ? 'Unstar report' : 'Star report'}
                                 onClick={() => r.id && toggle(r.id)}
                               >
-                                <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                                <StarIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
                               </Button>
                             </IconHoverTip>
                           </div>
@@ -340,7 +340,7 @@ export function ReportsPage() {
                     <div className="text-muted-foreground flex items-center justify-between gap-2">
                       <p className="text-xs">{formatDate(r.created_at)}</p>
                       <IconHoverTip
-                        title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        title={has(r.id) ? 'Unstar report' : 'Star report'}
                         caption={r.name}
                         side="left"
                       >
@@ -349,14 +349,14 @@ export function ReportsPage() {
                           variant="ghost"
                           size="icon-sm"
                           className="hover:text-primary pointer-events-auto shrink-0 rounded-lg"
-                          aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                          aria-label={has(r.id) ? 'Unstar report' : 'Star report'}
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
                             if (r.id) toggle(r.id)
                           }}
                         >
-                          <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                          <StarIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
                         </Button>
                       </IconHoverTip>
                     </div>

@@ -101,3 +101,15 @@ export function getOktaScopesList(): string[] {
   const s = raw || fallback
   return s.split(/[\s,]+/).filter(Boolean)
 }
+
+/** Must match auto-provision / IAM default group on the API (``TAILS_OKTA_AUTO_PROVISION_PERMISSION_GROUP``). */
+export function getDefaultPermissionGroupName(): string {
+  const v = trimEnv('VITE_TAILS_DEFAULT_PERMISSION_GROUP')
+  return v || 'default'
+}
+
+/** Must match ``TAILS_ADMIN_PERMISSION_GROUP`` on the API. */
+export function getAdminPermissionGroupName(): string {
+  const v = trimEnv('VITE_TAILS_ADMIN_PERMISSION_GROUP')
+  return v || 'admin'
+}

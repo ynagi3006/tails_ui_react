@@ -16,7 +16,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { apiFetchJson } from '@/lib/api'
-import { getApiBaseUrl, isUiAuthDisabled } from '@/config/env'
+import {
+  getAdminPermissionGroupName,
+  getApiBaseUrl,
+  getDefaultPermissionGroupName,
+  isUiAuthDisabled,
+} from '@/config/env'
 import { useTailsPrincipal } from '@/hooks/use-tails-principal'
 import { cn } from '@/lib/utils'
 
@@ -45,6 +50,22 @@ function displayName(m: { name?: string | null; preferred_username?: string | nu
   return uid
 }
 
+function membersResponseToRows(
+  res: GroupMembersResponse,
+): Array<{ user_id: string; email?: string | null; name?: string | null; preferred_username?: string | null }> {
+  const raw = res?.members ?? []
+  const rows =
+    raw.length > 0
+      ? raw.map((m) => ({
+          user_id: String(m.user_id ?? ''),
+          email: m.email,
+          name: m.name,
+          preferred_username: m.preferred_username,
+        }))
+      : (res?.user_ids ?? []).map((uid) => ({ user_id: String(uid) }))
+  return rows.filter((r) => r.user_id)
+}
+
 export function AdminPage() {
   const { isAdmin, principalReady } = useTailsPrincipal()
   const [activeGroup, setActiveGroup] = useState('')
@@ -67,6 +88,15 @@ export function AdminPage() {
   const loadedUserIds = useRef(new Set<string>())
   const [pageError, setPageError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+
+  const defaultGroupName = getDefaultPermissionGroupName()
+  const adminGroupName = getAdminPermissionGroupName()
+  const [promoteCandidates, setPromoteCandidates] = useState<
+    Array<{ user_id: string; email?: string | null; name?: string | null; preferred_username?: string | null }>
+  >([])
+  const [promoteLoading, setPromoteLoading] = useState(false)
+  const [promoteError, setPromoteError] = useState<string | null>(null)
+  const [promoteBusyUserId, setPromoteBusyUserId] = useState<string | null>(null)
 
   const showFeedback = useCallback((kind: 'success' | 'error', text: string) => {
     setFeedback({ kind, text })
@@ -100,17 +130,7 @@ export function AdminPage() {
         const res = await apiFetchJson<GroupMembersResponse>(
           `/tails-iam/groups/${encodeURIComponent(g)}/members`,
         )
-        const raw = res?.members ?? []
-        const rows =
-          raw.length > 0
-            ? raw.map((m) => ({
-                user_id: String(m.user_id ?? ''),
-                email: m.email,
-                name: m.name,
-                preferred_username: m.preferred_username,
-              }))
-            : (res?.user_ids ?? []).map((uid) => ({ user_id: String(uid) }))
-        setMembers(rows.filter((r) => r.user_id))
+        setMembers(membersResponseToRows(res))
       } catch (e) {
         setMembersError(e instanceof Error ? e.message : 'Failed to load members')
       } finally {
@@ -119,6 +139,30 @@ export function AdminPage() {
     },
     [],
   )
+
+  const loadPromoteCandidates = useCallback(async () => {
+    setPromoteError(null)
+    setPromoteLoading(true)
+    try {
+      const [defRes, admRes] = await Promise.all([
+        apiFetchJson<GroupMembersResponse>(
+          `/tails-iam/groups/${encodeURIComponent(defaultGroupName)}/members`,
+        ),
+        apiFetchJson<GroupMembersResponse>(
+          `/tails-iam/groups/${encodeURIComponent(adminGroupName)}/members`,
+        ),
+      ])
+      const defaultRows = membersResponseToRows(defRes)
+      const adminRows = membersResponseToRows(admRes)
+      const adminIds = new Set(adminRows.map((r) => r.user_id))
+      setPromoteCandidates(defaultRows.filter((r) => !adminIds.has(r.user_id)))
+    } catch (e) {
+      setPromoteCandidates([])
+      setPromoteError(e instanceof Error ? e.message : 'Failed to load default / admin members')
+    } finally {
+      setPromoteLoading(false)
+    }
+  }, [defaultGroupName, adminGroupName])
 
   const loadUsersPage = useCallback(async (append: boolean) => {
     if (usersFetchInFlight.current) return
@@ -170,7 +214,8 @@ export function AdminPage() {
     loadedUserIds.current = new Set()
     void loadGroups()
     void loadUsersPage(false)
-  }, [principalReady, isAdmin, loadGroups, loadUsersPage])
+    void loadPromoteCandidates()
+  }, [principalReady, isAdmin, loadGroups, loadUsersPage, loadPromoteCandidates])
 
   const onOpenGroup = () => {
     const g = activeGroup.trim()
@@ -208,11 +253,36 @@ export function AdminPage() {
       setAddEmail('')
       await loadGroups()
       await loadMembers(g)
+      if (g === defaultGroupName || g === adminGroupName) void loadPromoteCandidates()
       showFeedback('success', 'Member added')
     } catch (e) {
       showFeedback('error', e instanceof Error ? e.message : 'Add failed')
     } finally {
       setAddBusy(false)
+    }
+  }
+
+  const onAddToAdminGroup = async (uid: string, label: string) => {
+    if (!window.confirm(`Add ${label} to the "${adminGroupName}" permission group?`)) return
+    setPromoteBusyUserId(uid)
+    try {
+      await apiFetchJson<undefined>(
+        `/tails-iam/groups/${encodeURIComponent(adminGroupName)}/members`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ user_id: uid }),
+        },
+      )
+      await loadPromoteCandidates()
+      await loadGroups()
+      if (activeGroup.trim() === adminGroupName) void loadMembers(adminGroupName)
+      if (activeGroup.trim() === defaultGroupName) void loadMembers(defaultGroupName)
+      void loadUsersPage(false)
+      showFeedback('success', `Added to ${adminGroupName}`)
+    } catch (e) {
+      showFeedback('error', e instanceof Error ? e.message : 'Failed to add to admin group')
+    } finally {
+      setPromoteBusyUserId(null)
     }
   }
 
@@ -227,6 +297,7 @@ export function AdminPage() {
       )
       await loadMembers(g)
       await loadGroups()
+      if (g === defaultGroupName || g === adminGroupName) void loadPromoteCandidates()
       showFeedback('success', 'Member removed')
     } catch (e) {
       showFeedback('error', e instanceof Error ? e.message : 'Remove failed')
@@ -262,7 +333,7 @@ export function AdminPage() {
     <div className="space-y-8 pb-12">
       <PageHeader
         title="Admin"
-        description="Permission groups and membership. Add members by email; the user must already have a profile in Tails."
+        description="Permission groups and membership. Promote users from the default group to admin, or add members by email."
       />
 
       {pageError ? (
@@ -413,6 +484,68 @@ export function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="rounded-2xl border-border/80 py-0 shadow-sm">
+        <CardHeader className="border-border/60 border-b px-6 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <CardTitle className="text-lg">Default → admin</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 rounded-xl"
+              disabled={promoteLoading}
+              onClick={() => void loadPromoteCandidates()}
+            >
+              {promoteLoading ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 px-6 py-6">
+          {promoteLoading && promoteCandidates.length === 0 ? (
+            <Skeleton className="h-32 w-full rounded-xl" />
+          ) : promoteError ? (
+            <p className="text-destructive text-sm" role="alert">
+              {promoteError}
+            </p>
+          ) : promoteCandidates.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No one to promote — either everyone in {defaultGroupName} is already in {adminGroupName}, or the default
+              group has no members yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {promoteCandidates.map((m) => {
+                const uid = m.user_id
+                const label = displayName(m, uid)
+                const email = String(m.email || '').trim()
+                const sub = email && label !== email ? email : ''
+                return (
+                  <li
+                    key={uid}
+                    className="border-border/70 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/50 px-3 py-2.5"
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-foreground text-sm font-medium leading-snug">{label}</p>
+                      {sub ? <p className="text-muted-foreground text-xs">{sub}</p> : null}
+                      <code className="text-muted-foreground block text-xs">{uid}</code>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="shrink-0 rounded-lg"
+                      disabled={promoteBusyUserId !== null}
+                      onClick={() => void onAddToAdminGroup(uid, label)}
+                    >
+                      {promoteBusyUserId === uid ? 'Adding…' : `Add to ${adminGroupName}`}
+                    </Button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="rounded-2xl border-border/80 py-0 shadow-sm">
         <CardHeader className="border-border/60 border-b px-6 py-5">
