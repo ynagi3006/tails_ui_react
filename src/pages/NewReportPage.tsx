@@ -276,6 +276,17 @@ export function NewReportPage() {
                 />
               </CardContent>
             </Card>
+
+            <Card className="rounded-2xl border-border/80 py-0 shadow-sm">
+              <CardContent className="flex flex-wrap items-center justify-end gap-2 px-6 py-6 sm:gap-3">
+                <Button type="button" variant="ghost" className="rounded-xl" asChild>
+                  <Link to="/reports">Cancel</Link>
+                </Button>
+                <Button type="submit" size="lg" className="rounded-xl px-8" disabled={submitting}>
+                  {submitting ? 'Creating…' : 'Create report'}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-4">
@@ -320,20 +331,6 @@ export function NewReportPage() {
               </CardContent>
             </Card>
           </aside>
-        </div>
-
-        <div className="border-border/70 bg-muted/15 flex flex-col-reverse gap-3 rounded-2xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p className="text-muted-foreground text-center text-xs sm:text-left sm:text-sm">
-            You can archive or rename later from the catalog.
-          </p>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:gap-3">
-            <Button type="button" variant="ghost" className="rounded-xl" asChild>
-              <Link to="/reports">Cancel</Link>
-            </Button>
-            <Button type="submit" size="lg" className="rounded-xl px-8" disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create report'}
-            </Button>
-          </div>
         </div>
       </form>
     </div>

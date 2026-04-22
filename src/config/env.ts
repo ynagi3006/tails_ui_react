@@ -18,8 +18,20 @@ export function isUiAuthDisabled(): boolean {
   return v === '1' || v === 'true' || v === 'yes' || v === 'on'
 }
 
-/** True when SPA should enable Okta sign-in (issuer + client id). */
+/**
+ * Use server-side Okta **Web** (confidential) OAuth: no ``client_secret`` in the bundle; the API exchanges
+ * the code and sets an http-only session cookie. Requires ``VITE_TAILS_API_URL`` and matching server env.
+ */
+export function isWebOktaAuth(): boolean {
+  const v = trimEnv('VITE_TAILS_USE_WEB_OKTA').toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
+}
+
+/** True when the browser should enable Okta sign-in (SPA: issuer + client id; Web: flag + API base URL). */
 export function isOktaBrowserConfigured(): boolean {
+  if (isWebOktaAuth()) {
+    return Boolean(getApiBaseUrl())
+  }
   return Boolean(trimEnv('VITE_OKTA_ISSUER') && trimEnv('VITE_OKTA_CLIENT_ID'))
 }
 

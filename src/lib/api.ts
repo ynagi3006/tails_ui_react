@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/config/env'
+import { getApiBaseUrl, isWebOktaAuth } from '@/config/env'
 import { getApiAuthHeaders } from '@/lib/api-auth-headers'
 
 function apiV1Base(): string {
@@ -34,7 +34,9 @@ export async function apiFetchJson<T>(path: string, init: RequestInit = {}): Pro
   if (init.body != null && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  const res = await fetch(url, { ...init, headers })
+  const credentials: RequestCredentials | undefined =
+    init.credentials ?? (isWebOktaAuth() ? 'include' : undefined)
+  const res = await fetch(url, { ...init, headers, ...(credentials != null ? { credentials } : {}) })
   if (res.status === 204) return undefined as T
   if (!res.ok) {
     throw new Error(await readErrorMessage(res))

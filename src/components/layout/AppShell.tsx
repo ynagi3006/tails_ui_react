@@ -149,7 +149,7 @@ export function AppShell() {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-[min(100%,112rem)] flex-1 px-4 py-8 sm:px-6">
+      <main className="mx-auto flex w-full max-w-[min(100%,112rem)] min-h-0 flex-1 flex-col px-4 py-8 sm:px-6">
         <Outlet />
       </main>
       <footer className="border-border/60 text-muted-foreground border-t py-6 text-sm">

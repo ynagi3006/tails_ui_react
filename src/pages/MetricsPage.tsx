@@ -271,9 +271,6 @@ export function MetricsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border/60">
-                  <TableHead className="text-muted-foreground w-[4.5rem] px-2 font-medium">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
                   <TableHead className="text-muted-foreground font-medium">
                     <Button variant="ghost" size="sm" className="-ml-2 h-8 rounded-lg font-medium" onClick={cycleNameSort}>
                       Name {sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
@@ -296,51 +293,13 @@ export function MetricsPage() {
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground py-16 text-center text-sm">
+                    <TableCell colSpan={4} className="text-muted-foreground py-16 text-center text-sm">
                       No metrics match this query.
                     </TableCell>
                   </TableRow>
                 ) : (
                   rows.map((r) => (
                     <TableRow key={r.metric_version_id || r.id} className="border-border/50">
-                      <TableCell className="w-[4.5rem] px-2 align-top">
-                        <div className="flex flex-col gap-1">
-                          <IconHoverTip
-                            title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                            caption={r.name}
-                            side="right"
-                          >
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
-                              aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                              onClick={() => r.id && toggle(r.id)}
-                            >
-                              <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
-                            </Button>
-                          </IconHoverTip>
-                          <IconHoverTip
-                            title="Duplicate metric"
-                            caption={`Open new metric with the same definition and SQL. Name stays blank. · ${r.name}`}
-                            side="right"
-                          >
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
-                              aria-label={`Duplicate metric: ${r.name}`}
-                              disabled={!r.id || duplicatingId === r.id}
-                              aria-busy={duplicatingId === r.id}
-                              onClick={() => r.id && void duplicateMetric(r.id)}
-                            >
-                              <CopyIcon className="size-4" />
-                            </Button>
-                          </IconHoverTip>
-                        </div>
-                      </TableCell>
                       <TableCell>
                         <div className="font-medium">
                           <Link to={`/metrics/${encodeURIComponent(r.id)}`} className="hover:text-primary hover:underline">
@@ -363,8 +322,46 @@ export function MetricsPage() {
                             : '—'}
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-                        {formatDate(r.created_at)}
+                      <TableCell className="text-muted-foreground align-top">
+                        <div className="flex w-full min-w-44 items-start justify-between gap-2">
+                          <span className="pt-1 text-xs whitespace-nowrap tabular-nums">{formatDate(r.created_at)}</span>
+                          <div className="text-muted-foreground flex shrink-0 items-center gap-0.5">
+                            <IconHoverTip
+                              title="Duplicate metric"
+                              caption={`Open new metric with the same definition and SQL. Name stays blank. · ${r.name}`}
+                              side="left"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="hover:text-primary size-8 rounded-lg"
+                                aria-label={`Duplicate metric: ${r.name}`}
+                                disabled={!r.id || duplicatingId === r.id}
+                                aria-busy={duplicatingId === r.id}
+                                onClick={() => r.id && void duplicateMetric(r.id)}
+                              >
+                                <CopyIcon className="size-4" />
+                              </Button>
+                            </IconHoverTip>
+                            <IconHoverTip
+                              title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                              caption={r.name}
+                              side="left"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="hover:text-primary size-8 rounded-lg"
+                                aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                                onClick={() => r.id && toggle(r.id)}
+                              >
+                                <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                              </Button>
+                            </IconHoverTip>
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

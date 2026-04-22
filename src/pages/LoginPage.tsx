@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 
 import { useOktaAuth } from '@/auth/OktaAuthProvider'
-import { getOktaRedirectUri, isUiAuthDisabled } from '@/config/env'
+import { getApiBaseUrl, getOktaRedirectUri, isUiAuthDisabled, isWebOktaAuth } from '@/config/env'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -59,8 +59,18 @@ export function LoginPage() {
             />
             <CardTitle className="text-xl">Sign in</CardTitle>
             <CardDescription>
-              Okta is not configured for this build. Set <code className="text-xs">VITE_OKTA_ISSUER</code> and{' '}
-              <code className="text-xs">VITE_OKTA_CLIENT_ID</code> in <code className="text-xs">.env</code>.
+              {isWebOktaAuth() ? (
+                <>
+                  Web Okta needs <code className="text-xs">VITE_TAILS_API_URL</code> (API origin). Set{' '}
+                  <code className="text-xs">VITE_TAILS_USE_WEB_OKTA=1</code> and ensure the API has the Web client secret
+                  and <code className="text-xs">TAILS_OKTA_SERVER_REDIRECT_URI</code>.
+                </>
+              ) : (
+                <>
+                  Okta is not configured for this build. Set <code className="text-xs">VITE_OKTA_ISSUER</code> and{' '}
+                  <code className="text-xs">VITE_OKTA_CLIENT_ID</code> in <code className="text-xs">.env</code>.
+                </>
+              )}
             </CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">
@@ -123,8 +133,19 @@ export function LoginPage() {
             </p>
           ) : null}
           <p className="text-muted-foreground text-center text-xs leading-relaxed">
-            Redirect URI registered in Okta must include:{' '}
-            <span className="text-foreground font-mono break-all">{getOktaRedirectUri()}</span>
+            {isWebOktaAuth() ? (
+              <>
+                In Okta, add this <strong>Sign-in redirect URI</strong> for your <strong>Web</strong> application:{' '}
+                <span className="text-foreground font-mono break-all">
+                  {(getApiBaseUrl() || '(set VITE_TAILS_API_URL)').replace(/\/$/, '')}/auth/okta/callback
+                </span>
+              </>
+            ) : (
+              <>
+                Redirect URI registered in Okta must include:{' '}
+                <span className="text-foreground font-mono break-all">{getOktaRedirectUri()}</span>
+              </>
+            )}
           </p>
         </CardContent>
       </Card>

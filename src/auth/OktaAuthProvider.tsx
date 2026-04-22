@@ -2,28 +2,34 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import OktaAuth from '@okta/okta-auth-js'
 
 import {
+  getApiBaseUrl,
   getOktaRedirectUri,
   getOktaScopesList,
   isOktaBrowserConfigured,
   isUiAuthDisabled,
+  isWebOktaAuth,
   warnOktaIssuerShapeInDev,
 } from '@/config/env'
-import { emitAuthChanged, registerOktaAccessTokenGetter } from '@/lib/api-auth-headers'
+import {
+  emitAuthChanged,
+  registerOktaAccessTokenGetter,
+  TAILS_AUTH_CHANGED_EVENT,
+} from '@/lib/api-auth-headers'
 
 export type OktaAuthContextValue = {
   configured: boolean
-  /** True after the first ``isAuthenticated`` check finishes (avoids flashing /login for returning users). */
+  /** True after the first ``isAuthenticated`` / session check finishes (avoids flashing /login for returning users). */
   authReady: boolean
   /**
-   * True after ``oktaAuth.start()`` completes. Per Okta, redirect handling must run only after the
-   * client service (token manager, renew, storage sync) has started.
+   * True after ``oktaAuth.start()`` completes (SPA), or after the first Web session probe.
+   * Redirect handling for PKCE must run only after the client service has started.
    */
   oktaBootstrapped: boolean
-  /** Shared SDK client when ``configured``; login return is handled in this provider (any registered redirect URI). */
+  /** Shared SDK client when SPA PKCE mode; null for Web (confidential) OAuth. */
   oktaAuth: OktaAuth | null
   authenticated: boolean
   userLabel: string
-  /** Optional path (e.g. from RequireAuth) used as Okta ``originalUri`` after sign-in. */
+  /** Optional path (e.g. from RequireAuth) preserved for redirect after sign-in. */
   signIn: (returnTo?: string) => Promise<void>
   signOut: () => Promise<void>
 }
@@ -51,6 +57,7 @@ export function useOktaAuth(): OktaAuthContextValue {
 type Props = { children: ReactNode }
 
 export function OktaAuthProvider({ children }: Props) {
+  const webOkta = isWebOktaAuth()
   const issuer = (import.meta.env.VITE_OKTA_ISSUER || '').trim()
   const clientId = (import.meta.env.VITE_OKTA_CLIENT_ID || '').trim()
   const postLogout = (import.meta.env.VITE_OKTA_POST_LOGOUT_REDIRECT_URI || '').trim()
@@ -60,7 +67,7 @@ export function OktaAuthProvider({ children }: Props) {
 
   const oktaAuth = useMemo(() => {
     if (typeof window === 'undefined') return null
-    if (isUiAuthDisabled()) return null
+    if (isUiAuthDisabled() || webOkta) return null
     if (!issuer || !clientId) return null
     const redirectUri = getOktaRedirectUri()
     if (!redirectUri) return null
@@ -75,7 +82,7 @@ export function OktaAuthProvider({ children }: Props) {
         storage: 'localStorage',
       },
     })
-  }, [issuer, clientId, redirectEnvKey, authDisabledFlag])
+  }, [issuer, clientId, redirectEnvKey, authDisabledFlag, webOkta])
 
   const [authenticated, setAuthenticated] = useState(false)
   const [authReady, setAuthReady] = useState(false)
@@ -98,7 +105,67 @@ export function OktaAuthProvider({ children }: Props) {
     }
   }, [])
 
+  /** Web (confidential) OAuth: session cookie + ``GET /auth/okta/session``. */
   useEffect(() => {
+    if (!webOkta) return
+    registerOktaAccessTokenGetter(null)
+    setAuthReady(false)
+    setOktaBootstrapped(false)
+    let cancelled = false
+
+    const probeSession = async (emit: boolean) => {
+      const base = getApiBaseUrl()
+      if (!base) {
+        if (!cancelled) {
+          setAuthenticated(false)
+          setUserLabel('')
+          setAuthReady(true)
+          setOktaBootstrapped(true)
+        }
+        return
+      }
+      try {
+        const r = await fetch(`${base}/auth/okta/session`, { credentials: 'include' })
+        if (cancelled) return
+        if (r.ok) {
+          const j = (await r.json()) as { authenticated?: boolean; user_label?: string; email?: string }
+          const authed = Boolean(j?.authenticated)
+          setAuthenticated(authed)
+          const lab = (typeof j?.user_label === 'string' ? j.user_label : '').trim()
+          const em = (typeof j?.email === 'string' ? j.email : '').trim()
+          setUserLabel(lab || em || '')
+        } else {
+          setAuthenticated(false)
+          setUserLabel('')
+        }
+      } catch (e) {
+        console.error('[tails] Web Okta session check failed', e)
+        if (!cancelled) {
+          setAuthenticated(false)
+          setUserLabel('')
+        }
+      }
+      if (!cancelled) {
+        setAuthReady(true)
+        setOktaBootstrapped(true)
+        if (emit) emitAuthChanged()
+      }
+    }
+
+    void probeSession(true)
+
+    const onAuthChanged = () => {
+      void probeSession(false)
+    }
+    window.addEventListener(TAILS_AUTH_CHANGED_EVENT, onAuthChanged)
+    return () => {
+      cancelled = true
+      window.removeEventListener(TAILS_AUTH_CHANGED_EVENT, onAuthChanged)
+    }
+  }, [webOkta])
+
+  useEffect(() => {
+    if (webOkta) return
     registerOktaAccessTokenGetter(null)
     if (!oktaAuth) {
       setAuthReady(false)
@@ -133,9 +200,6 @@ export function OktaAuthProvider({ children }: Props) {
       } catch (e) {
         console.error('[tails] OktaAuth.start() failed', e)
       }
-      // Exchange ?code=… for tokens on whatever URL is registered in Okta (e.g. `/` or `/login/callback`).
-      // Do not skip this when `cancelled` (React StrictMode): the first effect teardown would otherwise
-      // leave the auth code unprocessed and the user stuck on /login with no session.
       if (oktaAuth.isLoginRedirect()) {
         if (!inflightLoginRedirect) {
           inflightLoginRedirect = oktaAuth
@@ -151,11 +215,8 @@ export function OktaAuthProvider({ children }: Props) {
               }
               if (/client authentication failed/i.test(msg)) {
                 console.error(
-                  '[tails] Token step failed (Okta often maps invalid_client / policy issues to this message). ' +
-                    'Verify: (1) Application type is **Single Page Application** — not "Web" (Web expects client_secret at /token; SPA uses PKCE only). ' +
-                    '(2) VITE_OKTA_CLIENT_ID is the **Client ID** of that SPA (General tab). ' +
-                    '(3) VITE_OKTA_ISSUER is the **same authorization server** the app is assigned to (include `/oauth2/default` or `/oauth2/aus…`). ' +
-                    '(4) VITE_OKTA_REDIRECT_URI matches a Sign-in redirect URI **exactly** (e.g. http://localhost:5173/).',
+                  '[tails] Token step failed for PKCE. If your Okta app is **Web** (confidential), use ' +
+                    '`VITE_TAILS_USE_WEB_OKTA=1` and server `/auth/okta/*` instead of PKCE in the browser.',
                 )
                 console.info('[tails] Debug: issuer=', issuer, 'redirectUri=', getOktaRedirectUri(), 'clientId len=', clientId.length)
               }
@@ -209,38 +270,85 @@ export function OktaAuthProvider({ children }: Props) {
       void oktaAuth.stop().catch(() => {})
       registerOktaAccessTokenGetter(null)
     }
-  }, [oktaAuth, refreshUserLabel])
+  }, [oktaAuth, refreshUserLabel, webOkta])
 
-  const signIn = useCallback(async (returnTo?: string) => {
-    if (!oktaAuth || typeof window === 'undefined') return
-    oktaAuth.removeOriginalUri()
-    let originalUri = `${window.location.origin}/`
-    if (typeof returnTo === 'string' && returnTo.trim()) {
-      const p = returnTo.trim()
-      if (p.startsWith('/') && !p.startsWith('//')) {
-        try {
-          originalUri = new URL(p, window.location.origin).href
-        } catch {
-          /* keep default */
+  const signIn = useCallback(
+    async (returnTo?: string) => {
+      if (webOkta) {
+        const base = getApiBaseUrl()
+        if (!base || typeof window === 'undefined') return
+        let path = '/'
+        if (typeof returnTo === 'string' && returnTo.trim()) {
+          const p = returnTo.trim()
+          if (p.startsWith('/') && !p.startsWith('//')) {
+            path = p
+          }
+        }
+        const returnToUrl = new URL(path, window.location.origin).href
+        window.location.assign(`${base}/auth/okta/login?return_to=${encodeURIComponent(returnToUrl)}`)
+        return
+      }
+      if (!oktaAuth || typeof window === 'undefined') return
+      oktaAuth.removeOriginalUri()
+      let originalUri = `${window.location.origin}/`
+      if (typeof returnTo === 'string' && returnTo.trim()) {
+        const p = returnTo.trim()
+        if (p.startsWith('/') && !p.startsWith('//')) {
+          try {
+            originalUri = new URL(p, window.location.origin).href
+          } catch {
+            /* keep default */
+          }
         }
       }
-    }
-    if (originalUri.includes('/login')) {
-      originalUri = `${window.location.origin}/`
-    }
-    await oktaAuth.signInWithRedirect({ originalUri })
-  }, [oktaAuth])
+      if (originalUri.includes('/login')) {
+        originalUri = `${window.location.origin}/`
+      }
+      await oktaAuth.signInWithRedirect({ originalUri })
+    },
+    [oktaAuth, webOkta],
+  )
 
   const signOut = useCallback(async () => {
+    if (webOkta) {
+      const base = getApiBaseUrl()
+      if (!base || typeof window === 'undefined') return
+      const post =
+        postLogout.trim() ||
+        (typeof window !== 'undefined' ? `${window.location.origin}/login` : '/login')
+      window.location.assign(`${base}/auth/okta/logout?post_logout_redirect_uri=${encodeURIComponent(post)}`)
+      setAuthenticated(false)
+      setUserLabel('')
+      emitAuthChanged()
+      return
+    }
     if (!oktaAuth) return
     const post = postLogout || (typeof window !== 'undefined' ? window.location.origin : undefined)
     await oktaAuth.signOut({ postLogoutRedirectUri: post })
     setAuthenticated(false)
     setUserLabel('')
     emitAuthChanged()
-  }, [oktaAuth, postLogout])
+  }, [oktaAuth, postLogout, webOkta])
 
   const value = useMemo<OktaAuthContextValue>(() => {
+    if (isUiAuthDisabled()) {
+      return defaultValue
+    }
+    if (webOkta) {
+      if (!getApiBaseUrl()) {
+        return defaultValue
+      }
+      return {
+        configured: true,
+        authReady,
+        oktaBootstrapped,
+        oktaAuth: null,
+        authenticated,
+        userLabel,
+        signIn,
+        signOut,
+      }
+    }
     if (!oktaAuth || !isOktaBrowserConfigured()) {
       return defaultValue
     }
@@ -254,7 +362,16 @@ export function OktaAuthProvider({ children }: Props) {
       signIn,
       signOut,
     }
-  }, [oktaAuth, authReady, oktaBootstrapped, authenticated, userLabel, signIn, signOut])
+  }, [
+    webOkta,
+    oktaAuth,
+    authReady,
+    oktaBootstrapped,
+    authenticated,
+    userLabel,
+    signIn,
+    signOut,
+  ])
 
   return <OktaAuthContext.Provider value={value}>{children}</OktaAuthContext.Provider>
 }

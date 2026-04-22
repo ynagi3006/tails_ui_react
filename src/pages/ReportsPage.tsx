@@ -221,9 +221,6 @@ export function ReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border/60">
-                  <TableHead className="text-muted-foreground w-12 px-2 font-medium">
-                    <span className="sr-only">Favorite</span>
-                  </TableHead>
                   <TableHead className="text-muted-foreground font-medium">
                     <Button variant="ghost" size="sm" className="-ml-2 h-8 rounded-lg font-medium" onClick={cycleNameSort}>
                       Name {sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
@@ -246,31 +243,13 @@ export function ReportsPage() {
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground py-16 text-center text-sm">
+                    <TableCell colSpan={4} className="text-muted-foreground py-16 text-center text-sm">
                       No reports match this query.
                     </TableCell>
                   </TableRow>
                 ) : (
                   rows.map((r) => (
                     <TableRow key={r.id} className="border-border/50">
-                      <TableCell className="w-12 px-2 align-top">
-                        <IconHoverTip
-                          title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                          caption={r.name}
-                          side="right"
-                        >
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
-                            aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                            onClick={() => r.id && toggle(r.id)}
-                          >
-                            <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
-                          </Button>
-                        </IconHoverTip>
-                      </TableCell>
                       <TableCell>
                         <div className="font-medium">
                           <Link to={`/reports/${encodeURIComponent(r.id)}`} className="hover:text-primary hover:underline">
@@ -297,8 +276,28 @@ export function ReportsPage() {
                             : '—'}
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-                        {formatDate(r.created_at)}
+                      <TableCell className="text-muted-foreground align-top">
+                        <div className="flex w-full min-w-44 items-start justify-between gap-2">
+                          <span className="pt-1 text-xs whitespace-nowrap tabular-nums">{formatDate(r.created_at)}</span>
+                          <div className="text-muted-foreground flex shrink-0">
+                            <IconHoverTip
+                              title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                              caption={r.name}
+                              side="left"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="hover:text-primary size-8 rounded-lg"
+                                aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                                onClick={() => r.id && toggle(r.id)}
+                              >
+                                <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                              </Button>
+                            </IconHoverTip>
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -323,31 +322,9 @@ export function ReportsPage() {
                     aria-label={`Open report: ${r.name}`}
                   />
                   <CardHeader className="pointer-events-none relative z-10 gap-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-lg leading-snug">
-                        <span className="text-foreground group-hover:text-primary transition-colors">{r.name}</span>
-                      </CardTitle>
-                      <IconHoverTip
-                        title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                        caption={r.name}
-                        side="left"
-                      >
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-muted-foreground hover:text-primary pointer-events-auto shrink-0 rounded-lg"
-                          aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            if (r.id) toggle(r.id)
-                          }}
-                        >
-                          <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
-                        </Button>
-                      </IconHoverTip>
-                    </div>
+                    <CardTitle className="text-lg leading-snug">
+                      <span className="text-foreground group-hover:text-primary transition-colors">{r.name}</span>
+                    </CardTitle>
                     <Badge variant={reportStatusBadgeVariant(r.status)} className="w-fit rounded-md capitalize font-normal">
                       {r.status.toLowerCase()}
                     </Badge>
@@ -360,7 +337,29 @@ export function ReportsPage() {
                           ))
                         : null}
                     </div>
-                    <p className="text-muted-foreground text-xs">{formatDate(r.created_at)}</p>
+                    <div className="text-muted-foreground flex items-center justify-between gap-2">
+                      <p className="text-xs">{formatDate(r.created_at)}</p>
+                      <IconHoverTip
+                        title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        caption={r.name}
+                        side="left"
+                      >
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="hover:text-primary pointer-events-auto shrink-0 rounded-lg"
+                          aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (r.id) toggle(r.id)
+                          }}
+                        >
+                          <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                        </Button>
+                      </IconHoverTip>
+                    </div>
                   </CardHeader>
                   {r.description ? (
                     <CardContent className="pointer-events-none relative z-10 pt-0">

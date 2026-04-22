@@ -194,8 +194,9 @@ export function ReportBuilderPage() {
   const monacoTheme = themeResolved === 'dark' ? 'vs-dark' : 'light'
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
       <PageHeader
+        className="shrink-0"
         title="Report Builder"
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -247,7 +248,7 @@ export function ReportBuilderPage() {
       {status ? (
         <p
           className={cn(
-            'text-sm',
+            'shrink-0 text-sm',
             status.error ? 'text-destructive' : 'text-muted-foreground',
           )}
           role="status"
@@ -258,11 +259,9 @@ export function ReportBuilderPage() {
 
       <div
         className={cn(
-          'grid min-h-0 gap-4',
-          'min-h-[min(70vh,640px)]',
-          /* Fixed row height on lg so chat scroll stays inside the column (1fr + indefinite grid height = row grows with content) */
-          'lg:h-[min(72vh,680px)] lg:overflow-hidden',
-          'lg:[grid-template-rows:minmax(0,1fr)]',
+          'grid min-h-0 flex-1 gap-4',
+          'lg:overflow-hidden',
+          'lg:grid-rows-[minmax(0,1fr)]',
           'grid-cols-1',
           /* split: AI | template | preview */
           focusMode === 'split' &&
@@ -284,8 +283,7 @@ export function ReportBuilderPage() {
         <div
           className={cn(
             'flex min-h-0 flex-col gap-2 overflow-hidden',
-            /* Fixed cap on mobile; on lg fill the grid row and never grow past it (scroll stays inside panel) */
-            'h-[min(52vh,520px)] max-h-[min(52vh,520px)] lg:h-full lg:max-h-full',
+            'min-h-[min(44vh,380px)] max-h-[min(56vh,560px)] lg:max-h-none lg:h-full',
           )}
         >
           {agentOpen ? (
@@ -301,7 +299,7 @@ export function ReportBuilderPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-border/70 bg-muted/20 text-muted-foreground hover:text-foreground flex h-full min-h-[12rem] w-full flex-1 flex-col gap-2 rounded-2xl px-0 py-4 shadow-sm"
+                  className="border-border/70 bg-muted/20 text-muted-foreground hover:text-foreground flex h-full min-h-48 w-full flex-1 flex-col gap-2 rounded-2xl px-0 py-4 shadow-sm"
                   aria-label="Expand AI builder"
                   onClick={() => setAgentOpen(true)}
                 >
@@ -320,7 +318,7 @@ export function ReportBuilderPage() {
 
         <Card
           className={cn(
-            'border-border/70 flex min-h-[280px] min-h-0 flex-col overflow-hidden rounded-2xl shadow-sm lg:h-full lg:max-h-full lg:min-h-0',
+            'border-border/70 flex min-h-[280px] flex-col overflow-hidden rounded-2xl shadow-sm lg:h-full lg:max-h-full lg:min-h-0',
             focusMode === 'preview' && 'hidden',
           )}
         >
@@ -342,7 +340,7 @@ export function ReportBuilderPage() {
             </Button>
           </div>
           <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-            <div className="h-[min(58vh,600px)] w-full min-h-[22rem] shrink-0 lg:h-full lg:min-h-0 lg:flex-1">
+            <div className="h-full w-full min-h-72 flex-1 lg:min-h-0">
               <Editor
                 height="100%"
                 width="100%"
@@ -370,7 +368,7 @@ export function ReportBuilderPage() {
 
         <Card
           className={cn(
-            'border-border/70 flex min-h-[280px] min-h-0 flex-col overflow-hidden rounded-2xl shadow-sm lg:h-full lg:max-h-full lg:min-h-0',
+            'border-border/70 flex min-h-[280px] flex-col overflow-hidden rounded-2xl shadow-sm lg:h-full lg:max-h-full lg:min-h-0',
             focusMode === 'editor' && 'hidden',
           )}
         >
@@ -379,7 +377,7 @@ export function ReportBuilderPage() {
             <p className="text-muted-foreground text-xs">Server-side render, same as classic builder</p>
           </div>
           <CardContent className="bg-muted/10 flex min-h-0 flex-1 flex-col p-0">
-            <div className="flex min-h-[min(50vh,520px)] flex-1 flex-col overflow-hidden lg:min-h-0">
+            <div className="flex min-h-64 flex-1 flex-col overflow-hidden lg:min-h-0">
               {previewLoading ? (
                 <Skeleton className="h-full min-h-[240px] w-full rounded-none" />
               ) : previewUrl ? (

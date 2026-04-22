@@ -6,8 +6,13 @@ interface ImportMetaEnv {
   readonly VITE_TAILS_CLASSIC_UI_ORIGIN?: string
   /** Custom auth server issuer (must match access token ``iss``), e.g. ``https://org.okta.com/oauth2/aus...`` */
   readonly VITE_OKTA_ISSUER?: string
-  /** SPA application client id from Okta (public). */
+  /** SPA application client id from Okta (public). Not used when ``VITE_TAILS_USE_WEB_OKTA`` is on. */
   readonly VITE_OKTA_CLIENT_ID?: string
+  /**
+   * When ``true`` / ``1`` / ``yes`` / ``on``, use the API ``/auth/okta/*`` Web (confidential) flow instead of
+   * PKCE in the browser. Set ``VITE_TAILS_API_URL``; do not put ``client_secret`` in any ``VITE_*`` variable.
+   */
+  readonly VITE_TAILS_USE_WEB_OKTA?: string
   /** Optional; defaults to ``${window.location.origin}/login/callback``. Must match an Okta sign-in redirect URI. */
   readonly VITE_OKTA_REDIRECT_URI?: string
   /** Optional; defaults to ``openid profile email groups``. Add scopes your API expects (e.g. custom API scopes). */

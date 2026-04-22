@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { useOktaAuth } from '@/auth/OktaAuthProvider'
-import { isOktaBrowserConfigured, isUiAuthDisabled } from '@/config/env'
+import { isOktaBrowserConfigured, isUiAuthDisabled, isWebOktaAuth } from '@/config/env'
 
 function replaceDocumentToAppHome() {
   window.location.replace(new URL('/', window.location.origin).href)
@@ -19,7 +19,15 @@ export function LoginCallbackPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isUiAuthDisabled() || !isOktaBrowserConfigured() || !oktaAuth) {
+    if (isUiAuthDisabled()) {
+      navigate('/', { replace: true })
+      return
+    }
+    if (isWebOktaAuth()) {
+      navigate('/', { replace: true })
+      return
+    }
+    if (!isOktaBrowserConfigured() || !oktaAuth) {
       navigate('/', { replace: true })
       return
     }
