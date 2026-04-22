@@ -1,7 +1,7 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { ChevronDownIcon } from 'lucide-react'
 
-import { useOktaAuth } from '@/auth/OktaAuthProvider'
+import { useOktaAuth } from '@/auth/okta-auth-context'
 import { AgentChatWidget } from '@/components/agent-chat-widget'
 import { FeatureRequestFooterTrigger } from '@/components/feature-request-dialog'
 import { ThemeMenu } from '@/components/theme-menu'

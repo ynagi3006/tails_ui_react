@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { useOktaAuth } from '@/auth/OktaAuthProvider'
+import { useOktaAuth } from '@/auth/okta-auth-context'
 import { isOktaBrowserConfigured, isUiAuthDisabled, isWebOktaAuth } from '@/config/env'
 
 function replaceDocumentToAppHome() {

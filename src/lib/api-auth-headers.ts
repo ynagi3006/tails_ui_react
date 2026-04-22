@@ -3,6 +3,11 @@ import { isUiAuthDisabled } from '@/config/env'
 /** Dispatched after Okta login / logout / token renewal so hooks can refetch principal. */
 export const TAILS_AUTH_CHANGED_EVENT = 'tails-auth-changed'
 
+export type TailsAuthChangedDetail = {
+  /** When true, ``OktaAuthProvider`` Web session listener skips calling ``/auth/okta/session`` again (avoids feedback loops). */
+  skipWebSessionProbe?: boolean
+}
+
 type OktaAccessTokenGetter = () => Promise<string | undefined>
 
 let oktaAccessTokenGetter: OktaAccessTokenGetter | null = null
@@ -12,9 +17,9 @@ export function registerOktaAccessTokenGetter(getter: OktaAccessTokenGetter | nu
   oktaAccessTokenGetter = getter
 }
 
-export function emitAuthChanged(): void {
+export function emitAuthChanged(detail?: TailsAuthChangedDetail): void {
   try {
-    window.dispatchEvent(new CustomEvent(TAILS_AUTH_CHANGED_EVENT))
+    window.dispatchEvent(new CustomEvent(TAILS_AUTH_CHANGED_EVENT, { detail: detail ?? undefined }))
   } catch {
     /* ignore */
   }

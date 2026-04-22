@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 
-import { useOktaAuth } from '@/auth/OktaAuthProvider'
+import { useOktaAuth } from '@/auth/okta-auth-context'
 import { getApiBaseUrl, getOktaRedirectUri, isUiAuthDisabled, isWebOktaAuth } from '@/config/env'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'

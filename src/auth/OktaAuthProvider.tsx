@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import OktaAuth from '@okta/okta-auth-js'
 
 import {
@@ -9,50 +9,25 @@ import {
   isUiAuthDisabled,
   isWebOktaAuth,
   warnOktaIssuerShapeInDev,
+  warnWebOktaLoopbackHostnameMismatchInDev,
 } from '@/config/env'
 import {
   emitAuthChanged,
   registerOktaAccessTokenGetter,
   TAILS_AUTH_CHANGED_EVENT,
+  type TailsAuthChangedDetail,
 } from '@/lib/api-auth-headers'
-
-export type OktaAuthContextValue = {
-  configured: boolean
-  /** True after the first ``isAuthenticated`` / session check finishes (avoids flashing /login for returning users). */
-  authReady: boolean
-  /**
-   * True after ``oktaAuth.start()`` completes (SPA), or after the first Web session probe.
-   * Redirect handling for PKCE must run only after the client service has started.
-   */
-  oktaBootstrapped: boolean
-  /** Shared SDK client when SPA PKCE mode; null for Web (confidential) OAuth. */
-  oktaAuth: OktaAuth | null
-  authenticated: boolean
-  userLabel: string
-  /** Optional path (e.g. from RequireAuth) preserved for redirect after sign-in. */
-  signIn: (returnTo?: string) => Promise<void>
-  signOut: () => Promise<void>
-}
-
-const defaultValue: OktaAuthContextValue = {
-  configured: false,
-  authReady: false,
-  oktaBootstrapped: false,
-  oktaAuth: null,
-  authenticated: false,
-  userLabel: '',
-  signIn: async () => {},
-  signOut: async () => {},
-}
-
-const OktaAuthContext = createContext<OktaAuthContextValue>(defaultValue)
+import {
+  OKTA_AUTH_CONTEXT_DEFAULT,
+  OktaAuthContext,
+  type OktaAuthContextValue,
+} from '@/auth/okta-auth-context'
 
 /** Serialize PKCE redirect handling across React StrictMode double effects / concurrent mounts. */
 let inflightLoginRedirect: Promise<void> | null = null
 
-export function useOktaAuth(): OktaAuthContextValue {
-  return useContext(OktaAuthContext)
-}
+/** One hint per full page load when Web Okta session ``fetch`` fails before any HTTP response. */
+let webOktaSessionNetworkFailureHintLogged = false
 
 type Props = { children: ReactNode }
 
@@ -108,54 +83,103 @@ export function OktaAuthProvider({ children }: Props) {
   /** Web (confidential) OAuth: session cookie + ``GET /auth/okta/session``. */
   useEffect(() => {
     if (!webOkta) return
+    warnWebOktaLoopbackHostnameMismatchInDev()
     registerOktaAccessTokenGetter(null)
     setAuthReady(false)
     setOktaBootstrapped(false)
     let cancelled = false
+    let probeInFlight: Promise<void> | null = null
 
-    const probeSession = async (emit: boolean) => {
-      const base = getApiBaseUrl()
-      if (!base) {
+    const probeSession = (): Promise<void> => {
+      if (probeInFlight) return probeInFlight
+      probeInFlight = (async () => {
+        const base = getApiBaseUrl()
+        if (!base) {
+          if (!cancelled) {
+            setAuthenticated(false)
+            setUserLabel('')
+            setAuthReady(true)
+            setOktaBootstrapped(true)
+          }
+          return
+        }
+        let gotHttpResponse = false
+        try {
+          const r = await fetch(`${base}/auth/okta/session`, { credentials: 'include' })
+          if (cancelled) return
+          gotHttpResponse = true
+          if (r.ok) {
+            const j = (await r.json()) as { authenticated?: boolean; user_label?: string; email?: string }
+            const authed = Boolean(j?.authenticated)
+            setAuthenticated(authed)
+            const lab = (typeof j?.user_label === 'string' ? j.user_label : '').trim()
+            const em = (typeof j?.email === 'string' ? j.email : '').trim()
+            setUserLabel(lab || em || '')
+          } else {
+            setAuthenticated(false)
+            setUserLabel('')
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setAuthenticated(false)
+            setUserLabel('')
+          }
+          if (!webOktaSessionNetworkFailureHintLogged) {
+            webOktaSessionNetworkFailureHintLogged = true
+            const sessionUrl = `${base}/auth/okta/session`
+            const pageOrigin =
+              typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '(unknown)'
+            const errMsg = e instanceof Error ? e.message : String(e)
+            let diagnostic = ''
+            if (import.meta.env.DEV) {
+              try {
+                const h = await fetch(`${base}/health`)
+                if (h.ok) {
+                  diagnostic =
+                    `Dev diagnostic: GET ${base}/health (no credentials) succeeded, so the API is reachable. ` +
+                    `Session uses fetch(..., { credentials: 'include' }) — the browser may be blocking credentialed ` +
+                    `cross-origin responses. On tails_server: allow Origin ${pageOrigin} (add it to CORS_ORIGINS, ` +
+                    `or keep TAILS_CORS_LOCALHOST_REGEX enabled for http://localhost|127.0.0.1/0.0.0.0:*). ` +
+                    'If you open the UI via a LAN IP or [::1], add that exact origin to CORS_ORIGINS.'
+                } else {
+                  diagnostic = `Dev diagnostic: GET ${base}/health returned HTTP ${h.status}.`
+                }
+              } catch {
+                diagnostic =
+                  `Dev diagnostic: GET ${base}/health failed too — confirm uvicorn is bound to that host/port, ` +
+                  'VITE_TAILS_API_URL matches (http vs https), and nothing blocks localhost traffic.'
+              }
+            }
+            console.warn(
+              '[tails] Web Okta session fetch failed (network):',
+              errMsg,
+              '\n  Request:',
+              sessionUrl,
+              '\n  Page origin (sent as Origin):',
+              pageOrigin,
+              diagnostic ? `\n  ${diagnostic}` : '',
+            )
+          }
+        }
         if (!cancelled) {
-          setAuthenticated(false)
-          setUserLabel('')
           setAuthReady(true)
           setOktaBootstrapped(true)
+          if (gotHttpResponse) {
+            emitAuthChanged({ skipWebSessionProbe: true })
+          }
         }
-        return
-      }
-      try {
-        const r = await fetch(`${base}/auth/okta/session`, { credentials: 'include' })
-        if (cancelled) return
-        if (r.ok) {
-          const j = (await r.json()) as { authenticated?: boolean; user_label?: string; email?: string }
-          const authed = Boolean(j?.authenticated)
-          setAuthenticated(authed)
-          const lab = (typeof j?.user_label === 'string' ? j.user_label : '').trim()
-          const em = (typeof j?.email === 'string' ? j.email : '').trim()
-          setUserLabel(lab || em || '')
-        } else {
-          setAuthenticated(false)
-          setUserLabel('')
-        }
-      } catch (e) {
-        console.error('[tails] Web Okta session check failed', e)
-        if (!cancelled) {
-          setAuthenticated(false)
-          setUserLabel('')
-        }
-      }
-      if (!cancelled) {
-        setAuthReady(true)
-        setOktaBootstrapped(true)
-        if (emit) emitAuthChanged()
-      }
+      })().finally(() => {
+        probeInFlight = null
+      })
+      return probeInFlight
     }
 
-    void probeSession(true)
+    void probeSession()
 
-    const onAuthChanged = () => {
-      void probeSession(false)
+    const onAuthChanged = (ev: Event) => {
+      const d = (ev as CustomEvent<TailsAuthChangedDetail>).detail
+      if (d?.skipWebSessionProbe) return
+      void probeSession()
     }
     window.addEventListener(TAILS_AUTH_CHANGED_EVENT, onAuthChanged)
     return () => {
@@ -332,11 +356,11 @@ export function OktaAuthProvider({ children }: Props) {
 
   const value = useMemo<OktaAuthContextValue>(() => {
     if (isUiAuthDisabled()) {
-      return defaultValue
+      return OKTA_AUTH_CONTEXT_DEFAULT
     }
     if (webOkta) {
       if (!getApiBaseUrl()) {
-        return defaultValue
+        return OKTA_AUTH_CONTEXT_DEFAULT
       }
       return {
         configured: true,
@@ -350,7 +374,7 @@ export function OktaAuthProvider({ children }: Props) {
       }
     }
     if (!oktaAuth || !isOktaBrowserConfigured()) {
-      return defaultValue
+      return OKTA_AUTH_CONTEXT_DEFAULT
     }
     return {
       configured: true,

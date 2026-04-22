@@ -7,6 +7,34 @@ export function getApiBaseUrl(): string {
   return ''
 }
 
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0'])
+
+/**
+ * Web Okta stores the access token in an http-only cookie on the API host. With ``SameSite=Lax``,
+ * browsers treat ``localhost`` and ``127.0.0.1`` as different sites, so ``fetch`` from a UI on one
+ * loopback host to an API URL on the other often omits the cookie → ``/auth/okta/session`` returns 401.
+ */
+export function warnWebOktaLoopbackHostnameMismatchInDev(): void {
+  if (!import.meta.env.DEV) return
+  if (typeof window === 'undefined') return
+  if (!isWebOktaAuth()) return
+  const base = getApiBaseUrl()
+  if (!base) return
+  let apiHost: string
+  try {
+    apiHost = new URL(base).hostname.toLowerCase()
+  } catch {
+    return
+  }
+  const pageHost = (window.location.hostname || '').toLowerCase()
+  if (!LOOPBACK_HOSTNAMES.has(apiHost) || !LOOPBACK_HOSTNAMES.has(pageHost)) return
+  if (apiHost === pageHost) return
+  console.warn(
+    `[tails] Web Okta: page hostname "${pageHost}" ≠ API hostname "${apiHost}" in VITE_TAILS_API_URL. ` +
+      'Use the same loopback name as the UI (e.g. both `localhost` or both `127.0.0.1`) so the session cookie is sent on fetch.',
+  )
+}
+
 function trimEnv(key: keyof ImportMetaEnv): string {
   const v = import.meta.env[key]
   return typeof v === 'string' ? v.trim() : ''
