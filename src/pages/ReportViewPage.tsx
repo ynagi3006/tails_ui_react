@@ -12,8 +12,9 @@ import {
   SparklesIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  Trash2Icon,
 } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { DataTableCard } from '@/components/data-table-card'
 import { MonacoField } from '@/components/monaco-field'
@@ -21,6 +22,14 @@ import { PageHeader } from '@/components/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -73,6 +82,7 @@ function reportVersionIdFromReport(r: ReportDetail | null): string {
 }
 
 export function ReportViewPage() {
+  const navigate = useNavigate()
   const { reportId = '' } = useParams<{ reportId: string }>()
   const [pageTab, setPageTab] = useState<PageTab>('preview')
 
@@ -100,6 +110,8 @@ export function ReportViewPage() {
   const [savingDetails, setSavingDetails] = useState(false)
 
   const [actionMsg, setActionMsg] = useState<{ text: string; error?: boolean } | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const prevReportVersionIdRef = useRef<string>('')
 
   const [calendarOpen, setCalendarOpen] = useState(false)
@@ -283,6 +295,21 @@ export function ReportViewPage() {
     void loadEditions()
   }
 
+  const deleteReport = async () => {
+    if (!reportId) return
+    setDeleteBusy(true)
+    setActionMsg(null)
+    try {
+      await apiFetchJson(`/reports/${encodeURIComponent(reportId)}`, { method: 'DELETE' })
+      setDeleteOpen(false)
+      void navigate('/reports')
+    } catch (e) {
+      setActionMsg({ text: e instanceof Error ? e.message : 'Delete failed', error: true })
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   const saveTemplate = async () => {
     if (!reportVersionId) return
     const t = templateDraft.trim()
@@ -414,6 +441,17 @@ export function ReportViewPage() {
                   </a>
                 </Button>
               ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-xl"
+                disabled={!report || deleteBusy}
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2Icon className="mr-1.5 size-3.5" />
+                Delete
+              </Button>
             </div>
           }
         />
@@ -506,6 +544,32 @@ export function ReportViewPage() {
           {actionMsg.text}
         </p>
       ) : null}
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md" showCloseButton={!deleteBusy}>
+          <DialogHeader>
+            <DialogTitle>Delete this report?</DialogTitle>
+            <DialogDescription>
+              <span className="text-foreground font-medium">{reportName}</span> and all versions, editions, saved
+              templates, and dimension combinations will be permanently removed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="rounded-lg" disabled={deleteBusy} onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="rounded-lg"
+              disabled={deleteBusy}
+              onClick={() => void deleteReport()}
+            >
+              {deleteBusy ? 'Deleting…' : 'Delete report'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {pageTab === 'template' ? (
         <Card className="border-border/70 rounded-2xl shadow-sm">

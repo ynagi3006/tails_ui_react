@@ -1,20 +1,19 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ActivityIcon,
   ArrowLeftIcon,
-  ChevronRightIcon,
   CopyIcon,
   DatabaseIcon,
   ExternalLinkIcon,
   HeartIcon,
   FileCode2Icon,
-  FileTextIcon,
+  Loader2Icon,
   RefreshCwIcon,
   SaveIcon,
   Settings2Icon,
-  TableIcon,
+  Trash2Icon,
 } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { MonacoField } from '@/components/monaco-field'
 import { PageHeader } from '@/components/page-header'
@@ -25,6 +24,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -41,8 +41,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { useAirflowDagRunPoll } from '@/hooks/use-airflow-dag-run-poll'
 import { apiFetchJson, getClassicUiMetricUrl } from '@/lib/api'
 import { buildDuplicateMetricLocationState, stashMetricDuplicateForNewPage } from '@/lib/new-metric-duplicate'
+import { pickAirflowTriggerFromMetricResponse, type AirflowTriggerPayload } from '@/lib/metric-airflow-trigger'
 import { useMetricFavorites } from '@/hooks/use-metric-favorites'
 import { formatDate } from '@/lib/format-date'
 import { metricNameFromRow, metricVersionIdFromRow } from '@/lib/parse-metric-response'
@@ -57,137 +59,15 @@ type MetricLatest = MetricDetail & {
 
 type MetricPutResponse = {
   metric: MetricDetail
+  airflow_trigger?: unknown
 }
 
-type MetricReportRow = {
-  report_id: string
-  report_name: string
+type MetricSqlPostResponse = {
+  sql?: string
+  airflow_trigger?: unknown
 }
 
-type DatapointRow = {
-  id?: string
-  value?: number
-  record_dttm?: string
-  formatted_value?: string
-}
-
-const VIEWER_DATAPOINTS_LIMIT = 50
-
-type DatapointDetailRow = {
-  id: string
-  value: number | null
-  record_dttm: string
-  created_at: string
-  dimensions: Record<string, string>
-  metadata: Record<string, string>
-}
-
-function formatJsonishValue(val: unknown): string {
-  if (val == null) return ''
-  if (typeof val === 'string') return val
-  if (typeof val === 'number' || typeof val === 'boolean') return String(val)
-  try {
-    return JSON.stringify(val)
-  } catch {
-    return String(val)
-  }
-}
-
-/** Normalizes API dimensions/metadata: JSON strings, snake/camel keys, nested values → string values. */
-function parseKeyValueRecord(raw: unknown): Record<string, string> {
-  if (raw == null) return {}
-  if (typeof raw === 'string') {
-    const t = raw.trim()
-    if (!t) return {}
-    try {
-      return parseKeyValueRecord(JSON.parse(t) as unknown)
-    } catch {
-      return {}
-    }
-  }
-  if (typeof raw !== 'object' || Array.isArray(raw)) return {}
-  return Object.fromEntries(
-    Object.entries(raw as Record<string, unknown>).map(([k, v]) => [k, formatJsonishValue(v)]),
-  )
-}
-
-function parseDatapointDetail(raw: Record<string, unknown>): DatapointDetailRow {
-  const v = raw.value
-  let value: number | null = null
-  if (typeof v === 'number' && !Number.isNaN(v)) value = v
-  else if (v != null && String(v).trim() !== '') {
-    const n = Number(v)
-    if (!Number.isNaN(n)) value = n
-  }
-  return {
-    id: String(raw.id ?? ''),
-    value,
-    record_dttm: String(raw.record_dttm ?? raw.recordDttm ?? ''),
-    created_at: String(raw.created_at ?? raw.createdAt ?? ''),
-    dimensions: parseKeyValueRecord(raw.dimensions ?? raw.DIMENSIONS),
-    metadata: parseKeyValueRecord(raw.metadata ?? raw.METADATA),
-  }
-}
-
-function datapointValueLooksStructured(value: string): boolean {
-  const t = value.trim()
-  if (t.length > 100) return true
-  if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) return true
-  return t.includes('\n')
-}
-
-function DatapointValueCell({ value }: { value: string }) {
-  if (!value) return <span className="text-muted-foreground">—</span>
-  if (datapointValueLooksStructured(value)) {
-    return (
-      <pre
-        className="bg-background/90 text-foreground border-border/60 max-h-32 max-w-full overflow-auto rounded-md border px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all shadow-inner"
-        tabIndex={0}
-      >
-        {value}
-      </pre>
-    )
-  }
-  return <span className="text-foreground text-[13px] leading-snug wrap-break-word">{value}</span>
-}
-
-function DatapointKvSection({ title, accent, entries }: { title: string; accent: string; entries: [string, string][] }) {
-  if (entries.length === 0) return null
-  return (
-    <div
-      className={cn(
-        'border-border/50 bg-muted/25 rounded-lg border p-2.5 shadow-sm',
-        'ring-1 ring-inset ring-black/3 dark:ring-white/4',
-      )}
-    >
-      <div className="mb-2 flex items-center gap-2">
-        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', accent)} aria-hidden />
-        <span className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">{title}</span>
-        <span className="bg-border/80 h-px min-w-3 flex-1" aria-hidden />
-        <span className="text-muted-foreground/80 font-mono text-[10px] tabular-nums">{entries.length}</span>
-      </div>
-      <ul className="space-y-2.5">
-        {entries.map(([k, v]) => (
-          <li key={k} className="list-none">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
-              <Badge
-                variant="secondary"
-                className="text-muted-foreground w-fit shrink-0 rounded-md px-1.5 py-0 font-mono text-[10px] font-medium tracking-tight"
-              >
-                {k}
-              </Badge>
-              <div className="min-w-0 flex-1 pt-0 sm:pt-0.5">
-                <DatapointValueCell value={v} />
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-type PageTab = 'overview' | 'definition' | 'sql' | 'airflow'
+type PageTab = 'definition' | 'sql' | 'airflow'
 
 type AirflowLogRow = {
   dag_run_id: string
@@ -270,17 +150,22 @@ function DefItem({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+type LocationAirflowState = {
+  airflowTrigger?: AirflowTriggerPayload | null
+}
+
 export function MetricDetailPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { metricId = '' } = useParams<{ metricId: string }>()
   const { toggle: toggleMetricFavorite, has: hasMetricFavorite } = useMetricFavorites()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [metric, setMetric] = useState<MetricDetail | null>(null)
   const [latest, setLatest] = useState<MetricLatest | null>(null)
-  const [reports, setReports] = useState<MetricReportRow[]>([])
-  const [datapoints, setDatapoints] = useState<DatapointRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<PageTab>('overview')
+  const [tab, setTab] = useState<PageTab>('definition')
 
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
@@ -298,15 +183,16 @@ export function MetricDetailPage() {
 
   const [statusMsg, setStatusMsg] = useState<{ text: string; error?: boolean } | null>(null)
 
+  /** When set, poll ``GET /airflow/runs/{id}`` after metric create or save (same as classic UI). */
+  const [dagPollKeys, setDagPollKeys] = useState<{ dag_run_id: string; dag_id?: string } | null>(null)
+  const consumedNavAirflow = useRef(false)
+  const airflowPoll = useAirflowDagRunPoll(dagPollKeys?.dag_run_id, dagPollKeys?.dag_id)
+
   const [airflowLogs, setAirflowLogs] = useState<AirflowLogRow[]>([])
   const [airflowLoading, setAirflowLoading] = useState(false)
   const [airflowError, setAirflowError] = useState<string | null>(null)
 
   const [duplicateNavigating, setDuplicateNavigating] = useState(false)
-  const [datapointsViewerOpen, setDatapointsViewerOpen] = useState(false)
-  const [viewerDatapoints, setViewerDatapoints] = useState<DatapointDetailRow[]>([])
-  const [viewerDpLoading, setViewerDpLoading] = useState(false)
-  const [viewerDpError, setViewerDpError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!metricId) return
@@ -315,48 +201,16 @@ export function MetricDetailPage() {
     try {
       const m = await apiFetchJson<MetricDetail>(`/metrics/${encodeURIComponent(metricId)}`)
       setMetric(m)
-      const mvid = metricVersionIdFromRow(m)
       try {
         const withDp = await apiFetchJson<MetricLatest>(`/metrics/${encodeURIComponent(metricId)}/latest`)
         setLatest(withDp)
       } catch {
         setLatest(null)
       }
-      if (mvid) {
-        try {
-          const dps = await apiFetchJson<DatapointRow[]>(
-            `/metrics/${encodeURIComponent(mvid)}/datapoints?limit=12&skip=0`,
-          )
-          setDatapoints(Array.isArray(dps) ? dps : [])
-        } catch {
-          setDatapoints([])
-        }
-        try {
-          const list = await apiFetchJson<unknown[]>(`/metrics/version/${encodeURIComponent(mvid)}/reports`)
-          setReports(
-            Array.isArray(list)
-              ? list.map((raw) => {
-                  const row = raw as Record<string, unknown>
-                  return {
-                    report_id: String(row.report_id ?? ''),
-                    report_name: String(row.report_name ?? 'Unnamed'),
-                  }
-                })
-              : [],
-          )
-        } catch {
-          setReports([])
-        }
-      } else {
-        setReports([])
-        setDatapoints([])
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load metric')
       setMetric(null)
       setLatest(null)
-      setReports([])
-      setDatapoints([])
     } finally {
       setLoading(false)
     }
@@ -365,6 +219,27 @@ export function MetricDetailPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    consumedNavAirflow.current = false
+  }, [metricId])
+
+  useEffect(() => {
+    if (consumedNavAirflow.current) return
+    const st = location.state as LocationAirflowState | null
+    const tr = st?.airflowTrigger
+    if (tr?.dag_run_id) {
+      consumedNavAirflow.current = true
+      setDagPollKeys({ dag_run_id: tr.dag_run_id, dag_id: tr.dag_id })
+      navigate('.', { replace: true, state: {} })
+    }
+  }, [location.state, navigate])
+
+  useEffect(() => {
+    if (airflowPoll.terminalKind !== 'success') return
+    const t = window.setTimeout(() => setDagPollKeys(null), 15_000)
+    return () => window.clearTimeout(t)
+  }, [airflowPoll.terminalKind])
 
   useEffect(() => {
     if (!metric) return
@@ -434,7 +309,14 @@ export function MetricDetailPage() {
         }),
       })
       setMetric(res.metric)
-      setStatusMsg({ text: 'Metric definition saved.' })
+      const trig = pickAirflowTriggerFromMetricResponse(res)
+      if (trig?.dag_run_id) {
+        setDagPollKeys({ dag_run_id: trig.dag_run_id, dag_id: trig.dag_id })
+        setStatusMsg({ text: 'Metric definition saved. A collection run was triggered in Airflow.' })
+      } else {
+        const note = trig?.message && trig.status === 'skipped' ? ` ${trig.message}` : ''
+        setStatusMsg({ text: `Metric definition saved.${note}` })
+      }
       void load()
     } catch (e) {
       setStatusMsg({ text: e instanceof Error ? e.message : 'Save failed', error: true })
@@ -453,13 +335,24 @@ export function MetricDetailPage() {
     setSavingSql(true)
     setStatusMsg(null)
     try {
-      await apiFetchJson(`/metrics/${encodeURIComponent(metricId)}/sql`, {
+      const res = await apiFetchJson<MetricSqlPostResponse>(`/metrics/${encodeURIComponent(metricId)}/sql`, {
         method: 'POST',
         body: JSON.stringify({ sql }),
       })
-      setStatusMsg({
-        text: 'SQL saved. A new metric version may have been created if the query changed.',
-      })
+      const trig = pickAirflowTriggerFromMetricResponse(res)
+      if (trig?.dag_run_id) {
+        setDagPollKeys({ dag_run_id: trig.dag_run_id, dag_id: trig.dag_id })
+        setStatusMsg({
+          text: 'SQL saved. A new metric version was created and a collection run was triggered in Airflow.',
+        })
+      } else {
+        setStatusMsg({
+          text:
+            trig?.status === 'skipped' && trig.message
+              ? `SQL saved. ${trig.message}`
+              : 'SQL saved. A new metric version may have been created if the query changed.',
+        })
+      }
       await load()
       await loadSql()
     } catch (e) {
@@ -497,27 +390,22 @@ export function MetricDetailPage() {
     if (tab === 'airflow' && mvid) void loadAirflowLogs()
   }, [tab, mvid, loadAirflowLogs])
 
-  const loadViewerDatapoints = useCallback(async () => {
-    if (!mvid) return
-    setViewerDpLoading(true)
-    setViewerDpError(null)
+  const deleteMetric = async () => {
+    if (!metricId) return
+    setDeleteBusy(true)
+    setStatusMsg(null)
     try {
-      const sp = new URLSearchParams({
-        limit: String(VIEWER_DATAPOINTS_LIMIT),
-        skip: '0',
-      })
-      const data = await apiFetchJson<unknown>(
-        `/metrics/${encodeURIComponent(mvid)}/datapoints?${sp.toString()}`,
-      )
-      const list = Array.isArray(data) ? data : []
-      setViewerDatapoints(list.map((row) => parseDatapointDetail(row as Record<string, unknown>)))
+      await apiFetchJson(`/metrics/${encodeURIComponent(metricId)}`, { method: 'DELETE' })
+      if (hasMetricFavorite(metricId)) toggleMetricFavorite(metricId)
+      setDeleteOpen(false)
+      setDagPollKeys(null)
+      void navigate('/metrics')
     } catch (e) {
-      setViewerDpError(e instanceof Error ? e.message : 'Failed to load datapoints')
-      setViewerDatapoints([])
+      setStatusMsg({ text: e instanceof Error ? e.message : 'Delete failed', error: true })
     } finally {
-      setViewerDpLoading(false)
+      setDeleteBusy(false)
     }
-  }, [mvid])
+  }
 
   const duplicateToNewMetric = useCallback(async () => {
     if (!metric || !metricId) return
@@ -561,6 +449,45 @@ export function MetricDetailPage() {
         </p>
       ) : null}
 
+      {dagPollKeys?.dag_run_id ? (
+        <div
+          className="border-primary/25 bg-primary/5 text-foreground rounded-2xl border px-4 py-3 shadow-sm"
+          role="status"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium">Metric collection (Airflow)</p>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {airflowPoll.isTerminal && airflowPoll.terminalKind === 'success'
+                  ? 'Last triggered run finished successfully. This notice hides in a few seconds.'
+                  : airflowPoll.isTerminal && airflowPoll.terminalKind === 'failed'
+                    ? `Run failed${airflowPoll.snapshot?.state ? ` (${airflowPoll.snapshot.state})` : ''}. Check run logs for details.`
+                    : airflowPoll.snapshot?.state
+                      ? `Run state: ${airflowPoll.snapshot.state}. Still polling every 10s (same as the classic metrics UI).`
+                      : 'Run queued or starting. Polling Airflow for status…'}
+              </p>
+              {airflowPoll.lastPollError ? (
+                <p className="text-destructive text-xs">{airflowPoll.lastPollError}</p>
+              ) : null}
+              <p className="text-muted-foreground font-mono text-[10px] break-all opacity-80">
+                {dagPollKeys.dag_run_id}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {airflowPoll.isPollingActive ? (
+                <Loader2Icon className="text-primary size-5 animate-spin" aria-hidden />
+              ) : null}
+              <Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={() => setTab('airflow')}>
+                Run logs
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="rounded-lg" onClick={() => setDagPollKeys(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="space-y-4">
           <Skeleton className="h-36 rounded-2xl" />
@@ -570,15 +497,30 @@ export function MetricDetailPage() {
         <>
           <div className="border-border/70 from-primary/8 via-card to-card relative overflow-hidden rounded-2xl border bg-gradient-to-br p-6 shadow-sm sm:p-8">
             <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0 space-y-2">
+              <div className="min-w-0 space-y-3">
                 <p className="text-muted-foreground text-xs font-medium tracking-widest uppercase">Metric</p>
                 <h1 className="text-foreground text-2xl font-semibold tracking-tight sm:text-3xl">{name}</h1>
-                {pickStr(metric, 'description') ? (
-                  <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
-                    {pickStr(metric, 'description')}
-                  </p>
-                ) : null}
-                <div className="flex flex-wrap gap-2 pt-1">
+                <div className="max-w-2xl space-y-2">
+                  <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Description</p>
+                  <div className="border-border/50 bg-muted/15 rounded-xl border px-4 py-3 sm:px-5">
+                    <p className="text-foreground text-sm leading-relaxed">
+                      {pickStr(metric, 'description').trim() || '—'}
+                    </p>
+                  </div>
+                </div>
+                <dl className="text-foreground mt-1 grid max-w-2xl grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,7rem)_1fr] sm:gap-y-2.5">
+                  <DefItem label="Created by">{createdByFromMetric(metric) || '—'}</DefItem>
+                  <DefItem label="Connector">{pickStr(metric, 'source_connector') || '—'}</DefItem>
+                  <DefItem label="Collection">
+                    {pickStr(metric, 'collection_window')
+                      ? pickStr(metric, 'collection_window').replace(/_/g, ' ')
+                      : '—'}
+                  </DefItem>
+                  <DefItem label="Created at">
+                    {pickStr(metric, 'created_at') ? formatDate(pickStr(metric, 'created_at')) : '—'}
+                  </DefItem>
+                </dl>
+                <div className="flex flex-wrap gap-2 pt-0.5">
                   {pickStr(metric, 'default_metric_format') ? (
                     <Badge variant="secondary" className="rounded-md font-normal">
                       {pickStr(metric, 'default_metric_format')}
@@ -631,24 +573,21 @@ export function MetricDetailPage() {
                     </Button>
                   </IconHoverTip>
                   <IconHoverTip
-                    title="Recent datapoints"
-                    caption={`Inspect the last ${VIEWER_DATAPOINTS_LIMIT} values and timestamps in a table.`}
+                    title="Datapoints"
+                    caption="Open the full datapoint viewer with time range, paging, and filters."
                     side="bottom"
                   >
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="rounded-xl"
-                      aria-label={`View ${VIEWER_DATAPOINTS_LIMIT} most recent datapoints`}
-                      disabled={!mvid}
-                      onClick={() => {
-                        setDatapointsViewerOpen(true)
-                        if (mvid) void loadViewerDatapoints()
-                      }}
-                    >
-                      <DatabaseIcon className="size-4" />
-                    </Button>
+                    {metricId && mvid ? (
+                      <Button type="button" variant="outline" size="icon" className="rounded-xl" asChild>
+                        <Link to={`/metrics/${encodeURIComponent(metricId)}/datapoints`} aria-label="View datapoints">
+                          <DatabaseIcon className="size-4" />
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="icon" className="rounded-xl" disabled aria-label="View datapoints">
+                        <DatabaseIcon className="size-4" />
+                      </Button>
+                    )}
                   </IconHoverTip>
                   <IconHoverTip
                     title="Duplicate metric"
@@ -667,10 +606,26 @@ export function MetricDetailPage() {
                       {duplicateNavigating ? 'Preparing…' : 'Duplicate'}
                     </Button>
                   </IconHoverTip>
-                  <IconHoverTip title="Refresh" caption="Reload metric, latest value, and linked data from the API." side="bottom">
+                  <IconHoverTip title="Refresh" caption="Reload metric and latest value from the API." side="bottom">
                     <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => void load()}>
                       <RefreshCwIcon className="size-3.5" />
                       Refresh
+                    </Button>
+                  </IconHoverTip>
+                  <IconHoverTip
+                    title="Delete metric"
+                    caption="Removes this metric, every version, datapoints, and stored SQL. Cannot be undone."
+                    side="bottom"
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-xl"
+                      onClick={() => setDeleteOpen(true)}
+                    >
+                      <Trash2Icon className="mr-1.5 size-3.5" />
+                      Delete
                     </Button>
                   </IconHoverTip>
                   {classic ? (
@@ -691,7 +646,6 @@ export function MetricDetailPage() {
           <div className="border-border/60 bg-muted/25 flex flex-wrap gap-1 rounded-full border p-1">
             {(
               [
-                ['overview', 'Overview', TableIcon],
                 ['definition', 'Definition', Settings2Icon],
                 ['sql', 'Source SQL', FileCode2Icon],
                 ['airflow', 'Airflow runs', ActivityIcon],
@@ -710,141 +664,6 @@ export function MetricDetailPage() {
               </Button>
             ))}
           </div>
-
-          {tab === 'overview' ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card className="border-border/70 lg:col-span-2 rounded-2xl shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-muted-foreground text-sm font-medium">Reports using this metric</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {reports.length === 0 ? (
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      No linked reports found for this metric version.
-                    </p>
-                  ) : (
-                    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {reports.map((r, i) => (
-                        <li key={r.report_id}>
-                          <Link
-                            to={`/reports/${encodeURIComponent(r.report_id)}`}
-                            className={cn(
-                              'border-border/70 bg-card hover:border-primary/30 hover:bg-muted/35 focus-visible:ring-ring group flex min-h-[4.25rem] items-center gap-3 rounded-xl border p-4 shadow-sm transition-all duration-200',
-                              'animate-in fade-in slide-in-from-bottom-2 zoom-in-95 fill-mode-both ease-out',
-                              'hover:-translate-y-0.5 hover:shadow-md',
-                              'focus-visible:ring-2 focus-visible:outline-none',
-                            )}
-                            style={{ animationDuration: '380ms', animationDelay: `${Math.min(i, 12) * 45}ms` }}
-                          >
-                            <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-105">
-                              <FileTextIcon className="size-5" aria-hidden />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="text-foreground block font-medium leading-snug">{r.report_name}</span>
-                              <span className="text-muted-foreground mt-0.5 block text-xs">Open report</span>
-                            </span>
-                            <ChevronRightIcon
-                              className="text-muted-foreground size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1"
-                              aria-hidden
-                            />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card
-                role="button"
-                tabIndex={0}
-                onClick={() => setTab('definition')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setTab('definition')
-                  }
-                }}
-                className="border-border/70 hover:border-primary/25 hover:bg-muted/20 focus-visible:ring-ring cursor-pointer rounded-2xl shadow-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-muted-foreground flex items-center gap-2 text-sm font-medium">
-                    <DatabaseIcon className="size-4" />
-                    Definition
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[minmax(0,7rem)_1fr] sm:gap-y-3">
-                    <DefItem label="Owned by">{pickStr(metric, 'owned_by', 'ownedBy') || '—'}</DefItem>
-                    <DefItem label="Created by">{createdByFromMetric(metric) || '—'}</DefItem>
-                    <DefItem label="Connector">{pickStr(metric, 'source_connector') || '—'}</DefItem>
-                    <DefItem label="Collection">
-                      {pickStr(metric, 'collection_window') ? pickStr(metric, 'collection_window').replace(/_/g, ' ') : '—'}
-                    </DefItem>
-                    <DefItem label="Created at">
-                      {pickStr(metric, 'created_at') ? formatDate(pickStr(metric, 'created_at')) : '—'}
-                    </DefItem>
-                  </dl>
-                  <p className="text-muted-foreground mt-4 flex items-center gap-1 text-xs font-medium">
-                    Edit definition
-                    <ChevronRightIcon className="size-3.5 opacity-70" aria-hidden />
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card
-                role="button"
-                tabIndex={0}
-                onClick={() => setTab('sql')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setTab('sql')
-                  }
-                }}
-                className="border-border/70 hover:border-primary/25 hover:bg-muted/20 focus-visible:ring-ring cursor-pointer rounded-2xl shadow-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-muted-foreground flex items-center gap-2 text-sm font-medium">
-                    <TableIcon className="size-4" />
-                    Recent datapoints
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {datapoints.length === 0 ? (
-                    <p className="text-muted-foreground text-sm leading-relaxed">No datapoints returned for this version.</p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg border border-border/60">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-muted/40 border-b border-border/60">
-                          <tr>
-                            <th className="px-3 py-2 font-medium">Recorded</th>
-                            <th className="px-3 py-2 font-medium">Value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {datapoints.map((dp) => (
-                            <tr key={String(dp.id ?? dp.record_dttm)} className="border-border/40 border-b last:border-0">
-                              <td className="text-muted-foreground px-3 py-2 whitespace-nowrap">
-                                {dp.record_dttm ? formatDate(dp.record_dttm) : '—'}
-                              </td>
-                              <td className="px-3 py-2 font-mono tabular-nums">
-                                {dp.formatted_value != null ? String(dp.formatted_value) : dp.value != null ? String(dp.value) : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <p className="text-muted-foreground mt-4 flex items-center gap-1 text-xs font-medium">
-                    View or edit source SQL
-                    <ChevronRightIcon className="size-3.5 opacity-70" aria-hidden />
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          ) : null}
 
           {tab === 'definition' ? (
             <Card className="border-border/70 rounded-2xl shadow-sm">
@@ -1058,99 +877,29 @@ export function MetricDetailPage() {
             </Card>
           ) : null}
 
-          <Dialog open={datapointsViewerOpen} onOpenChange={setDatapointsViewerOpen}>
-            <DialogContent className="flex max-h-[min(85vh,760px)] w-full max-w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
-              <DialogHeader className="border-border/60 shrink-0 space-y-0 border-b px-4 py-4 sm:px-6">
-                <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
-                  <div className="space-y-1.5">
-                    <DialogTitle className="flex items-center gap-2 text-lg">
-                      <DatabaseIcon className="size-5 shrink-0 opacity-80" aria-hidden />
-                      Recent datapoints
-                    </DialogTitle>
-                    <DialogDescription className="sr-only">Recent datapoints for this metric version.</DialogDescription>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 rounded-lg"
-                    disabled={viewerDpLoading || !mvid}
-                    onClick={() => void loadViewerDatapoints()}
-                  >
-                    <RefreshCwIcon className="size-3.5" />
-                    Refresh
-                  </Button>
-                </div>
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogContent className="sm:max-w-md" showCloseButton={!deleteBusy}>
+              <DialogHeader>
+                <DialogTitle>Delete this metric?</DialogTitle>
+                <DialogDescription>
+                  <span className="text-foreground font-medium">{name}</span> and all of its versions, datapoints, and
+                  warehouse SQL files will be permanently removed. This cannot be undone.
+                </DialogDescription>
               </DialogHeader>
-              <div className="min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-6">
-                {viewerDpError ? (
-                  <div
-                    className="border-destructive/30 bg-destructive/5 text-destructive rounded-xl border px-4 py-3 text-sm"
-                    role="alert"
-                  >
-                    {viewerDpError}
-                  </div>
-                ) : viewerDpLoading ? (
-                  <div className="space-y-2">
-                    {Array.from({ length: 8 }).map((_, i) => (
-                      <Skeleton key={i} className="h-9 w-full rounded-lg" />
-                    ))}
-                  </div>
-                ) : viewerDatapoints.length === 0 ? (
-                  <p className="text-muted-foreground text-sm leading-relaxed">No datapoints returned.</p>
-                ) : (
-                  <div className="rounded-xl border border-border/60">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead className="w-[1%] whitespace-nowrap">Recorded</TableHead>
-                          <TableHead className="w-[1%] whitespace-nowrap">Value</TableHead>
-                          <TableHead className="min-w-[16rem] max-w-xl">Dimensions &amp; metadata</TableHead>
-                          <TableHead className="w-[1%] whitespace-nowrap">Ingested</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {viewerDatapoints.map((dp, i) => {
-                          const dimEntries = Object.entries(dp.dimensions)
-                          const metaEntries = Object.entries(dp.metadata)
-                          const hasAny = dimEntries.length > 0 || metaEntries.length > 0
-                          return (
-                            <TableRow key={dp.id || `dp-${i}-${dp.record_dttm}`}>
-                              <TableCell className="text-muted-foreground whitespace-nowrap align-top text-xs">
-                                {dp.record_dttm ? formatDate(dp.record_dttm) : '—'}
-                              </TableCell>
-                              <TableCell className="font-mono text-sm tabular-nums align-top">
-                                {dp.value != null ? String(dp.value) : '—'}
-                              </TableCell>
-                              <TableCell className="max-w-[min(32rem,56vw)] align-top py-3">
-                                {!hasAny ? (
-                                  <span className="text-muted-foreground text-xs">—</span>
-                                ) : (
-                                  <div className="flex flex-col gap-2.5">
-                                    <DatapointKvSection
-                                      title="Dimensions"
-                                      accent="bg-sky-500/90 dark:bg-sky-400/90"
-                                      entries={dimEntries}
-                                    />
-                                    <DatapointKvSection
-                                      title="Metadata"
-                                      accent="bg-violet-500/90 dark:bg-violet-400/90"
-                                      entries={metaEntries}
-                                    />
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-muted-foreground whitespace-nowrap align-top text-xs">
-                                {dp.created_at ? formatDate(dp.created_at) : '—'}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" className="rounded-lg" disabled={deleteBusy} onClick={() => setDeleteOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="rounded-lg"
+                  disabled={deleteBusy}
+                  onClick={() => void deleteMetric()}
+                >
+                  {deleteBusy ? 'Deleting…' : 'Delete metric'}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </>

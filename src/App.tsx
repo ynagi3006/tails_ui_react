@@ -5,6 +5,7 @@ import { OktaAuthProvider } from '@/auth/OktaAuthProvider'
 import { RequireAuth } from '@/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
 import { HomePage } from '@/pages/HomePage'
+import { MetricDatapointsPage } from '@/pages/MetricDatapointsPage'
 import { MetricDetailPage } from '@/pages/MetricDetailPage'
 import { MetricsPage } from '@/pages/MetricsPage'
 import { NewMetricPage } from '@/pages/NewMetricPage'
@@ -33,6 +34,7 @@ export default function App() {
               <Route index element={<HomePage />} />
               <Route path="metrics" element={<MetricsPage />} />
               <Route path="metrics/new" element={<NewMetricPage />} />
+              <Route path="metrics/:metricId/datapoints" element={<MetricDatapointsPage />} />
               <Route path="metrics/:metricId" element={<MetricDetailPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/new" element={<NewReportPage />} />

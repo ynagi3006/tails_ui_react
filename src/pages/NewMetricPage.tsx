@@ -16,10 +16,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetchJson } from '@/lib/api'
+import { issuesByBodyField, parseFastApiIssuesFromErrorMessage } from '@/lib/fastapi-field-errors'
 import {
   clearStashedMetricDuplicate,
   readStashedMetricDuplicate,
 } from '@/lib/new-metric-duplicate'
+import { pickAirflowTriggerFromMetricResponse } from '@/lib/metric-airflow-trigger'
 import { metricIdFromRow } from '@/lib/parse-metric-response'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +39,63 @@ const FORMAT_OPTIONS = [
 type MetricCreateResponse = {
   metric?: Record<string, unknown>
   id?: string
+  airflow_trigger?: unknown
+}
+
+type MetricFieldKey =
+  | 'metricName'
+  | 'description'
+  | 'unit'
+  | 'collectionWindow'
+  | 'sourceSql'
+  | 'tags'
+  | 'form'
+
+type MetricFieldErrors = Partial<Record<MetricFieldKey, string>>
+
+const METRIC_BODY_TO_FIELD: Record<string, MetricFieldKey> = {
+  metric_name: 'metricName',
+  description: 'description',
+  default_metric_format: 'unit',
+  collection_window: 'collectionWindow',
+  source_connector: 'collectionWindow',
+  source_sql: 'sourceSql',
+  tags: 'tags',
+}
+
+function mergeMetricApiErrorMessage(message: string): MetricFieldErrors {
+  const issues = parseFastApiIssuesFromErrorMessage(message)
+  if (!issues.length) {
+    const m = message.toLowerCase()
+    if (m.includes('sql') || m.includes('record_dttm') || m.includes('source_sql')) {
+      return { sourceSql: message }
+    }
+    return { form: message }
+  }
+  const byBody = issuesByBodyField(issues)
+  const out: MetricFieldErrors = {}
+  const unmapped: string[] = []
+  for (const [k, v] of Object.entries(byBody)) {
+    const fk = METRIC_BODY_TO_FIELD[k]
+    if (fk) {
+      out[fk] = out[fk] ? `${out[fk]} ${v}` : v
+    } else {
+      unmapped.push(v)
+    }
+  }
+  if (unmapped.length) {
+    out.form = [out.form, ...unmapped].filter(Boolean).join(' ')
+  }
+  return Object.keys(out).length ? out : { form: message }
+}
+
+function FieldError({ id, message }: { id?: string; message?: string }) {
+  if (!message) return null
+  return (
+    <p id={id} className="text-destructive text-sm leading-snug" role="alert">
+      {message}
+    </p>
+  )
 }
 
 function parseTags(input: string): string[] {
@@ -59,7 +118,16 @@ export function NewMetricPage() {
   const [sourceSql, setSourceSql] = useState('')
   const [tagsInput, setTagsInput] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<MetricFieldErrors>({})
+
+  const clearField = (key: MetricFieldKey) => {
+    setFieldErrors((prev) => {
+      if (prev[key] == null) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
 
   const tags = useMemo(() => parseTags(tagsInput), [tagsInput])
 
@@ -103,17 +171,17 @@ export function NewMetricPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setFormError(null)
+    setFieldErrors({})
     if (!metricName.trim()) {
-      setFormError('Metric name is required.')
+      setFieldErrors({ metricName: 'Metric name is required.' })
       return
     }
     if (!description.trim()) {
-      setFormError('Description is required.')
+      setFieldErrors({ description: 'Description is required.' })
       return
     }
     if (!unit.trim()) {
-      setFormError('Choose a display format.')
+      setFieldErrors({ unit: 'Choose a display format.' })
       return
     }
 
@@ -128,13 +196,15 @@ export function NewMetricPage() {
     } else {
       source_connector = 'SNOWFLAKE_EDLDB'
       if (collectionWindow === 'MANUAL_COLLECTION') {
-        setFormError('Pick a refresh window for Snowflake metrics.')
+        setFieldErrors({ collectionWindow: 'Pick a refresh window for Snowflake metrics.' })
         return
       }
       collection_window = collectionWindow
       sql = sourceSql.trim()
       if (!sql) {
-        setFormError('Source SQL is required for Snowflake (must return record_dttm and value).')
+        setFieldErrors({
+          sourceSql: 'Source SQL is required for Snowflake (must return record_dttm and value).',
+        })
         return
       }
     }
@@ -160,9 +230,13 @@ export function NewMetricPage() {
       const id = metricIdFromRow(m as Record<string, unknown>)
       if (!id) throw new Error('API did not return a metric id')
       clearStashedMetricDuplicate()
-      void navigate(`/metrics/${encodeURIComponent(id)}`)
+      const airflowTrigger = pickAirflowTriggerFromMetricResponse(res)
+      void navigate(`/metrics/${encodeURIComponent(id)}`, {
+        state: airflowTrigger?.dag_run_id ? { airflowTrigger } : undefined,
+      })
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Create failed')
+      const msg = err instanceof Error ? err.message : 'Create failed'
+      setFieldErrors(mergeMetricApiErrorMessage(msg))
     } finally {
       setSubmitting(false)
     }
@@ -200,16 +274,7 @@ export function NewMetricPage() {
         </div>
       ) : null}
 
-      <form onSubmit={(e) => void onSubmit(e)} className="space-y-8">
-        {formError ? (
-          <div
-            className="bg-destructive/8 text-destructive border-destructive/25 rounded-2xl border px-4 py-3 text-sm"
-            role="alert"
-          >
-            {formError}
-          </div>
-        ) : null}
-
+      <form onSubmit={(e) => void onSubmit(e)} className="space-y-8" noValidate>
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-6">
             <Card className="rounded-2xl border-border/80 py-0 shadow-sm">
@@ -230,11 +295,17 @@ export function NewMetricPage() {
                   <Input
                     id="new-metric-name"
                     value={metricName}
-                    onChange={(e) => setMetricName(e.target.value)}
+                    onChange={(e) => {
+                      setMetricName(e.target.value)
+                      clearField('metricName')
+                    }}
                     required
                     placeholder="e.g. Units shipped"
                     className="h-11 rounded-xl text-base sm:h-12"
+                    aria-invalid={Boolean(fieldErrors.metricName)}
+                    aria-describedby={fieldErrors.metricName ? 'new-metric-name-error' : undefined}
                   />
+                  <FieldError id="new-metric-name-error" message={fieldErrors.metricName} />
                 </div>
                 <div className="space-y-3">
                   <span className="text-foreground text-sm font-medium">Display format</span>
@@ -247,12 +318,16 @@ export function NewMetricPage() {
                         variant={unit === opt.value ? 'default' : 'outline'}
                         className="h-10 min-w-[3.25rem] rounded-xl px-4 font-normal"
                         aria-pressed={unit === opt.value}
-                        onClick={() => setUnit(opt.value)}
+                        onClick={() => {
+                          setUnit(opt.value)
+                          clearField('unit')
+                        }}
                       >
                         {opt.label}
                       </Button>
                     ))}
                   </div>
+                  <FieldError id="new-metric-unit-error" message={fieldErrors.unit} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="new-metric-desc" className="text-foreground text-sm font-medium">
@@ -261,12 +336,18 @@ export function NewMetricPage() {
                   <Textarea
                     id="new-metric-desc"
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    onChange={(e) => {
+                      setDescription(e.target.value)
+                      clearField('description')
+                    }}
                     rows={4}
                     required
                     placeholder="What this metric measures and how it should be interpreted"
                     className="min-h-[6rem] resize-y rounded-xl"
+                    aria-invalid={Boolean(fieldErrors.description)}
+                    aria-describedby={fieldErrors.description ? 'new-metric-desc-error' : undefined}
                   />
+                  <FieldError id="new-metric-desc-error" message={fieldErrors.description} />
                 </div>
               </CardContent>
             </Card>
@@ -285,7 +366,11 @@ export function NewMetricPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => setSourceMode('manual')}
+                    onClick={() => {
+                      setSourceMode('manual')
+                      clearField('collectionWindow')
+                      clearField('sourceSql')
+                    }}
                     className={cn(
                       'border-border/80 hover:border-primary/30 rounded-2xl border bg-card p-5 text-left transition-colors',
                       sourceMode === 'manual' && 'border-primary bg-primary/5 ring-primary/20 ring-2',
@@ -298,7 +383,11 @@ export function NewMetricPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSourceMode('edldb')}
+                    onClick={() => {
+                      setSourceMode('edldb')
+                      clearField('collectionWindow')
+                      clearField('sourceSql')
+                    }}
                     className={cn(
                       'border-border/80 hover:border-primary/30 rounded-2xl border bg-card p-5 text-left transition-colors',
                       sourceMode === 'edldb' && 'border-primary bg-primary/5 ring-primary/20 ring-2',
@@ -318,7 +407,10 @@ export function NewMetricPage() {
                     <div className="grid max-w-lg gap-3 sm:grid-cols-2">
                       <button
                         type="button"
-                        onClick={() => setCollectionWindow('LATE_MORNING')}
+                        onClick={() => {
+                          setCollectionWindow('LATE_MORNING')
+                          clearField('collectionWindow')
+                        }}
                         className={cn(
                           'border-border/80 rounded-xl border p-3 text-left text-sm transition-colors',
                           collectionWindow === 'LATE_MORNING' && 'border-primary bg-primary/5 ring-primary/15 ring-2',
@@ -328,7 +420,10 @@ export function NewMetricPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCollectionWindow('LATE_AFTERNOON')}
+                        onClick={() => {
+                          setCollectionWindow('LATE_AFTERNOON')
+                          clearField('collectionWindow')
+                        }}
                         className={cn(
                           'border-border/80 rounded-xl border p-3 text-left text-sm transition-colors',
                           collectionWindow === 'LATE_AFTERNOON' && 'border-primary bg-primary/5 ring-primary/15 ring-2',
@@ -337,6 +432,7 @@ export function NewMetricPage() {
                         <span className="font-medium">Late afternoon</span>
                       </button>
                     </div>
+                    <FieldError id="new-metric-window-error" message={fieldErrors.collectionWindow} />
                   </div>
                 ) : null}
               </CardContent>
@@ -356,12 +452,15 @@ export function NewMetricPage() {
                   </CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="px-6 py-6">
+              <CardContent className="space-y-2 px-6 py-6">
                 <div className="bg-muted/40 border-border/60 rounded-xl border p-1">
                   <Textarea
                     id="new-metric-sql"
                     value={sourceSql}
-                    onChange={(e) => setSourceSql(e.target.value)}
+                    onChange={(e) => {
+                      setSourceSql(e.target.value)
+                      clearField('sourceSql')
+                    }}
                     rows={sourceMode === 'manual' ? 5 : 8}
                     placeholder={
                       sourceMode === 'manual'
@@ -370,8 +469,11 @@ export function NewMetricPage() {
                     }
                     className="border-0 bg-transparent font-mono text-[0.8rem] leading-relaxed shadow-none focus-visible:ring-0"
                     spellCheck={false}
+                    aria-invalid={Boolean(fieldErrors.sourceSql)}
+                    aria-describedby={fieldErrors.sourceSql ? 'new-metric-sql-error' : undefined}
                   />
                 </div>
+                <FieldError id="new-metric-sql-error" message={fieldErrors.sourceSql} />
               </CardContent>
             </Card>
 
@@ -385,25 +487,41 @@ export function NewMetricPage() {
                   <CardDescription>Optional — comma-separated for search and grouping.</CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="px-6 py-6">
+              <CardContent className="space-y-2 px-6 py-6">
                 <Input
                   id="new-metric-tags"
                   value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value)
+                    clearField('tags')
+                  }}
                   placeholder="e.g. core, weekly"
                   className="h-11 rounded-xl"
+                  aria-invalid={Boolean(fieldErrors.tags)}
+                  aria-describedby={fieldErrors.tags ? 'new-metric-tags-error' : undefined}
                 />
+                <FieldError id="new-metric-tags-error" message={fieldErrors.tags} />
               </CardContent>
             </Card>
 
             <Card className="rounded-2xl border-border/80 py-0 shadow-sm">
-              <CardContent className="flex flex-wrap items-center justify-end gap-2 px-6 py-6 sm:gap-3">
+              <CardContent className="flex flex-col gap-3 px-6 py-6 sm:gap-4">
+                {fieldErrors.form ? (
+                  <div
+                    className="bg-destructive/8 text-destructive border-destructive/25 rounded-xl border px-3 py-2 text-sm"
+                    role="alert"
+                  >
+                    {fieldErrors.form}
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <Button type="button" variant="ghost" className="rounded-xl" asChild>
                   <Link to="/metrics">Cancel</Link>
                 </Button>
                 <Button type="submit" size="lg" className="rounded-xl px-8" disabled={submitting}>
                   {submitting ? 'Creating…' : 'Create metric'}
                 </Button>
+                </div>
               </CardContent>
             </Card>
           </div>

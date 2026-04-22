@@ -17,11 +17,70 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetchJson } from '@/lib/api'
 import { DEFAULT_REPORT_BUILDER_TEMPLATE } from '@/lib/default-report-template'
+import { issuesByBodyField, parseFastApiIssuesFromErrorMessage } from '@/lib/fastapi-field-errors'
 import { cn } from '@/lib/utils'
 
 type ReportCreateResponse = {
   id?: string
   report_id?: string
+}
+
+type ReportFieldKey =
+  | 'reportName'
+  | 'description'
+  | 'status'
+  | 'publishWindow'
+  | 'template'
+  | 'tags'
+  | 'form'
+
+type ReportFieldErrors = Partial<Record<ReportFieldKey, string>>
+
+const REPORT_BODY_TO_FIELD: Record<string, ReportFieldKey> = {
+  report_name: 'reportName',
+  description: 'description',
+  status: 'status',
+  publish_window: 'publishWindow',
+  template: 'template',
+  tags: 'tags',
+}
+
+function mergeReportApiErrorMessage(message: string): ReportFieldErrors {
+  const issues = parseFastApiIssuesFromErrorMessage(message)
+  if (!issues.length) {
+    const m = message.toLowerCase()
+    if (m.includes('template') || m.includes('jinja') || m.includes('html')) {
+      return { template: message }
+    }
+    if (m.includes('publish')) {
+      return { publishWindow: message }
+    }
+    return { form: message }
+  }
+  const byBody = issuesByBodyField(issues)
+  const out: ReportFieldErrors = {}
+  const unmapped: string[] = []
+  for (const [k, v] of Object.entries(byBody)) {
+    const fk = REPORT_BODY_TO_FIELD[k]
+    if (fk) {
+      out[fk] = out[fk] ? `${out[fk]} ${v}` : v
+    } else {
+      unmapped.push(v)
+    }
+  }
+  if (unmapped.length) {
+    out.form = [out.form, ...unmapped].filter(Boolean).join(' ')
+  }
+  return Object.keys(out).length ? out : { form: message }
+}
+
+function FieldError({ id, message }: { id?: string; message?: string }) {
+  if (!message) return null
+  return (
+    <p id={id} className="text-destructive text-sm leading-snug" role="alert">
+      {message}
+    </p>
+  )
 }
 
 const STATUS_OPTIONS = [
@@ -46,7 +105,16 @@ export function NewReportPage() {
   const [tagsInput, setTagsInput] = useState('')
   const [template, setTemplate] = useState(DEFAULT_REPORT_BUILDER_TEMPLATE)
   const [submitting, setSubmitting] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<ReportFieldErrors>({})
+
+  const clearField = (key: ReportFieldKey) => {
+    setFieldErrors((prev) => {
+      if (prev[key] == null) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
 
   const tags = useMemo(() => parseTags(tagsInput), [tagsInput])
 
@@ -59,13 +127,13 @@ export function NewReportPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setFormError(null)
+    setFieldErrors({})
     if (!reportName.trim()) {
-      setFormError('Report name is required.')
+      setFieldErrors({ reportName: 'Report name is required.' })
       return
     }
     if (!publishWindow) {
-      setFormError('Choose a publish window.')
+      setFieldErrors({ publishWindow: 'Choose a publish window.' })
       return
     }
     setSubmitting(true)
@@ -87,7 +155,8 @@ export function NewReportPage() {
       if (!id) throw new Error('API did not return a report id')
       void navigate(`/reports/${encodeURIComponent(id)}`)
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Create failed')
+      const msg = err instanceof Error ? err.message : 'Create failed'
+      setFieldErrors(mergeReportApiErrorMessage(msg))
     } finally {
       setSubmitting(false)
     }
@@ -119,16 +188,7 @@ export function NewReportPage() {
         </div>
       </header>
 
-      <form onSubmit={(e) => void onSubmit(e)} className="space-y-8">
-        {formError ? (
-          <div
-            className="bg-destructive/8 text-destructive border-destructive/25 rounded-2xl border px-4 py-3 text-sm"
-            role="alert"
-          >
-            {formError}
-          </div>
-        ) : null}
-
+      <form onSubmit={(e) => void onSubmit(e)} className="space-y-8" noValidate>
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-6">
             <Card className="rounded-2xl border-border/80 py-0 shadow-sm">
@@ -149,11 +209,17 @@ export function NewReportPage() {
                   <Input
                     id="new-report-name"
                     value={reportName}
-                    onChange={(e) => setReportName(e.target.value)}
+                    onChange={(e) => {
+                      setReportName(e.target.value)
+                      clearField('reportName')
+                    }}
                     placeholder="e.g. Weekly ops snapshot"
                     required
                     className="h-11 rounded-xl text-base sm:h-12"
+                    aria-invalid={Boolean(fieldErrors.reportName)}
+                    aria-describedby={fieldErrors.reportName ? 'new-report-name-error' : undefined}
                   />
+                  <FieldError id="new-report-name-error" message={fieldErrors.reportName} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="new-report-desc" className="text-foreground text-sm font-medium">
@@ -162,11 +228,17 @@ export function NewReportPage() {
                   <Textarea
                     id="new-report-desc"
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    onChange={(e) => {
+                      setDescription(e.target.value)
+                      clearField('description')
+                    }}
                     rows={3}
                     placeholder="One or two sentences on what this report is for"
                     className="min-h-[5.5rem] resize-y rounded-xl"
+                    aria-invalid={Boolean(fieldErrors.description)}
+                    aria-describedby={fieldErrors.description ? 'new-report-desc-error' : undefined}
                   />
+                  <FieldError id="new-report-desc-error" message={fieldErrors.description} />
                 </div>
               </CardContent>
             </Card>
@@ -193,19 +265,26 @@ export function NewReportPage() {
                         variant={status === opt.value ? 'default' : 'outline'}
                         className="h-10 rounded-xl px-5 font-normal"
                         aria-pressed={status === opt.value}
-                        onClick={() => setStatus(opt.value)}
+                        onClick={() => {
+                          setStatus(opt.value)
+                          clearField('status')
+                        }}
                       >
                         {opt.label}
                       </Button>
                     ))}
                   </div>
+                  <FieldError id="new-report-status-error" message={fieldErrors.status} />
                 </div>
                 <div className="space-y-3">
                   <span className="text-foreground text-sm font-medium">Publish window</span>
                   <div className="grid max-w-lg gap-3 sm:grid-cols-2" role="group" aria-label="Publish window">
                     <button
                       type="button"
-                      onClick={() => setPublishWindow('LATE_MORNING')}
+                      onClick={() => {
+                        setPublishWindow('LATE_MORNING')
+                        clearField('publishWindow')
+                      }}
                       className={cn(
                         'border-border/80 hover:border-primary/30 rounded-2xl border bg-card p-4 text-left transition-colors',
                         publishWindow === 'LATE_MORNING' && 'border-primary bg-primary/5 ring-primary/20 ring-2',
@@ -216,7 +295,10 @@ export function NewReportPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPublishWindow('LATE_AFTERNOON')}
+                      onClick={() => {
+                        setPublishWindow('LATE_AFTERNOON')
+                        clearField('publishWindow')
+                      }}
                       className={cn(
                         'border-border/80 hover:border-primary/30 rounded-2xl border bg-card p-4 text-left transition-colors',
                         publishWindow === 'LATE_AFTERNOON' && 'border-primary bg-primary/5 ring-primary/20 ring-2',
@@ -226,6 +308,7 @@ export function NewReportPage() {
                       <p className="text-muted-foreground mt-1 text-xs leading-relaxed">Afternoon batch window</p>
                     </button>
                   </div>
+                  <FieldError id="new-report-window-error" message={fieldErrors.publishWindow} />
                 </div>
               </CardContent>
             </Card>
@@ -242,17 +325,23 @@ export function NewReportPage() {
                   </CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="px-6 py-6">
+              <CardContent className="space-y-2 px-6 py-6">
                 <div className="bg-muted/40 border-border/60 rounded-xl border p-1">
                   <Textarea
                     id="new-report-template"
                     value={template}
-                    onChange={(e) => setTemplate(e.target.value)}
+                    onChange={(e) => {
+                      setTemplate(e.target.value)
+                      clearField('template')
+                    }}
                     rows={12}
                     className="border-0 bg-transparent font-mono text-[0.8rem] leading-relaxed shadow-none focus-visible:ring-0"
                     spellCheck={false}
+                    aria-invalid={Boolean(fieldErrors.template)}
+                    aria-describedby={fieldErrors.template ? 'new-report-template-error' : undefined}
                   />
                 </div>
+                <FieldError id="new-report-template-error" message={fieldErrors.template} />
               </CardContent>
             </Card>
 
@@ -266,25 +355,41 @@ export function NewReportPage() {
                   <CardDescription>Optional — comma-separated labels for search and grouping.</CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="px-6 py-6">
+              <CardContent className="space-y-2 px-6 py-6">
                 <Input
                   id="new-report-tags"
                   value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value)
+                    clearField('tags')
+                  }}
                   placeholder="e.g. ops, weekly, leadership"
                   className="h-11 rounded-xl"
+                  aria-invalid={Boolean(fieldErrors.tags)}
+                  aria-describedby={fieldErrors.tags ? 'new-report-tags-error' : undefined}
                 />
+                <FieldError id="new-report-tags-error" message={fieldErrors.tags} />
               </CardContent>
             </Card>
 
             <Card className="rounded-2xl border-border/80 py-0 shadow-sm">
-              <CardContent className="flex flex-wrap items-center justify-end gap-2 px-6 py-6 sm:gap-3">
+              <CardContent className="flex flex-col gap-3 px-6 py-6 sm:gap-4">
+                {fieldErrors.form ? (
+                  <div
+                    className="bg-destructive/8 text-destructive border-destructive/25 rounded-xl border px-3 py-2 text-sm"
+                    role="alert"
+                  >
+                    {fieldErrors.form}
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <Button type="button" variant="ghost" className="rounded-xl" asChild>
                   <Link to="/reports">Cancel</Link>
                 </Button>
                 <Button type="submit" size="lg" className="rounded-xl px-8" disabled={submitting}>
                   {submitting ? 'Creating…' : 'Create report'}
                 </Button>
+                </div>
               </CardContent>
             </Card>
           </div>

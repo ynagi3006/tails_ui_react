@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { getApiBaseUrl, isUiAuthDisabled } from '@/config/env'
+import { getApiBaseUrl, isUiAuthDisabled, isWebOktaAuth } from '@/config/env'
 import { getApiAuthHeaders, TAILS_AUTH_CHANGED_EVENT } from '@/lib/api-auth-headers'
 
 type PrincipalPayload = {
@@ -12,7 +12,9 @@ async function fetchPrincipalJson(): Promise<{ ok: boolean; data: unknown }> {
   const root = getApiBaseUrl()
   if (!root) return { ok: false, data: { error: 'VITE_TAILS_API_URL is not set' } }
   try {
+    const credentials: RequestCredentials | undefined = isWebOktaAuth() ? 'include' : undefined
     const r = await fetch(`${root}/api/v1/users/me/principal`, {
+      ...(credentials != null ? { credentials } : {}),
       headers: { Accept: 'application/json', ...(await getApiAuthHeaders()) },
     })
     const text = await r.text()
