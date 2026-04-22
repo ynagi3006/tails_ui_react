@@ -3,6 +3,7 @@ import {
   ActivityIcon,
   ArrowLeftIcon,
   ChevronRightIcon,
+  CopyIcon,
   DatabaseIcon,
   ExternalLinkIcon,
   HeartIcon,
@@ -13,7 +14,7 @@ import {
   Settings2Icon,
   TableIcon,
 } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { MonacoField } from '@/components/monaco-field'
 import { PageHeader } from '@/components/page-header'
@@ -30,6 +31,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { IconHoverTip } from '@/components/ui/tooltip'
 import {
   Table,
   TableBody,
@@ -40,6 +42,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetchJson, getClassicUiMetricUrl } from '@/lib/api'
+import { buildDuplicateMetricLocationState, stashMetricDuplicateForNewPage } from '@/lib/new-metric-duplicate'
 import { useMetricFavorites } from '@/hooks/use-metric-favorites'
 import { formatDate } from '@/lib/format-date'
 import { metricNameFromRow, metricVersionIdFromRow } from '@/lib/parse-metric-response'
@@ -268,6 +271,7 @@ function DefItem({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function MetricDetailPage() {
+  const navigate = useNavigate()
   const { metricId = '' } = useParams<{ metricId: string }>()
   const { toggle: toggleMetricFavorite, has: hasMetricFavorite } = useMetricFavorites()
   const [metric, setMetric] = useState<MetricDetail | null>(null)
@@ -298,6 +302,7 @@ export function MetricDetailPage() {
   const [airflowLoading, setAirflowLoading] = useState(false)
   const [airflowError, setAirflowError] = useState<string | null>(null)
 
+  const [duplicateNavigating, setDuplicateNavigating] = useState(false)
   const [datapointsViewerOpen, setDatapointsViewerOpen] = useState(false)
   const [viewerDatapoints, setViewerDatapoints] = useState<DatapointDetailRow[]>([])
   const [viewerDpLoading, setViewerDpLoading] = useState(false)
@@ -514,6 +519,24 @@ export function MetricDetailPage() {
     }
   }, [mvid])
 
+  const duplicateToNewMetric = useCallback(async () => {
+    if (!metric || !metricId) return
+    setDuplicateNavigating(true)
+    try {
+      let sql = ''
+      try {
+        const r = await apiFetchJson<{ sql: string }>(`/metrics/${encodeURIComponent(metricId)}/sql`)
+        sql = r.sql ?? ''
+      } catch {
+        sql = ''
+      }
+      stashMetricDuplicateForNewPage(buildDuplicateMetricLocationState(metric as Record<string, unknown>, sql))
+      void navigate('/metrics/new')
+    } finally {
+      setDuplicateNavigating(false)
+    }
+  }, [metric, metricId, navigate])
+
   return (
     <div className="space-y-6">
       <Button variant="ghost" size="sm" className="gap-1.5 rounded-lg" asChild>
@@ -589,45 +612,76 @@ export function MetricDetailPage() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="rounded-xl"
+                  <IconHoverTip
                     title={hasMetricFavorite(metricId) ? 'Remove from favorites' : 'Add to favorites'}
-                    aria-label={hasMetricFavorite(metricId) ? 'Remove from favorites' : 'Add to favorites'}
-                    onClick={() => metricId && toggleMetricFavorite(metricId)}
+                    caption={name}
+                    side="bottom"
                   >
-                    <HeartIcon
-                      className={cn('size-4', hasMetricFavorite(metricId) && 'fill-primary text-primary')}
-                    />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="rounded-xl"
-                    title={`Recent datapoints (last ${VIEWER_DATAPOINTS_LIMIT})`}
-                    aria-label={`View ${VIEWER_DATAPOINTS_LIMIT} most recent datapoints`}
-                    disabled={!mvid}
-                    onClick={() => {
-                      setDatapointsViewerOpen(true)
-                      if (mvid) void loadViewerDatapoints()
-                    }}
-                  >
-                    <DatabaseIcon className="size-4" />
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => void load()}>
-                    <RefreshCwIcon className="size-3.5" />
-                    Refresh
-                  </Button>
-                  {classic ? (
-                    <Button size="sm" className="gap-1.5 rounded-xl" asChild>
-                      <a href={classic} target="_blank" rel="noreferrer">
-                        Classic UI
-                        <ExternalLinkIcon className="size-3.5 opacity-80" />
-                      </a>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="rounded-xl"
+                      aria-label={hasMetricFavorite(metricId) ? 'Remove from favorites' : 'Add to favorites'}
+                      onClick={() => metricId && toggleMetricFavorite(metricId)}
+                    >
+                      <HeartIcon
+                        className={cn('size-4', hasMetricFavorite(metricId) && 'fill-primary text-primary')}
+                      />
                     </Button>
+                  </IconHoverTip>
+                  <IconHoverTip
+                    title="Recent datapoints"
+                    caption={`Inspect the last ${VIEWER_DATAPOINTS_LIMIT} values and timestamps in a table.`}
+                    side="bottom"
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="rounded-xl"
+                      aria-label={`View ${VIEWER_DATAPOINTS_LIMIT} most recent datapoints`}
+                      disabled={!mvid}
+                      onClick={() => {
+                        setDatapointsViewerOpen(true)
+                        if (mvid) void loadViewerDatapoints()
+                      }}
+                    >
+                      <DatabaseIcon className="size-4" />
+                    </Button>
+                  </IconHoverTip>
+                  <IconHoverTip
+                    title="Duplicate metric"
+                    caption="New metric page opens with the same definition and SQL. Enter a new name there."
+                    side="bottom"
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={duplicateNavigating}
+                      onClick={() => void duplicateToNewMetric()}
+                    >
+                      <CopyIcon className="mr-1.5 size-3.5" />
+                      {duplicateNavigating ? 'Preparing…' : 'Duplicate'}
+                    </Button>
+                  </IconHoverTip>
+                  <IconHoverTip title="Refresh" caption="Reload metric, latest value, and linked data from the API." side="bottom">
+                    <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => void load()}>
+                      <RefreshCwIcon className="size-3.5" />
+                      Refresh
+                    </Button>
+                  </IconHoverTip>
+                  {classic ? (
+                    <IconHoverTip title="Classic UI" caption="Open this metric in the legacy Tails web app in a new tab." side="bottom">
+                      <Button size="sm" className="gap-1.5 rounded-xl" asChild>
+                        <a href={classic} target="_blank" rel="noreferrer">
+                          Classic UI
+                          <ExternalLinkIcon className="size-3.5 opacity-80" />
+                        </a>
+                      </Button>
+                    </IconHoverTip>
                   ) : null}
                 </div>
               </div>

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ExternalLinkIcon, HeartIcon, SearchIcon } from 'lucide-react'
+import { CopyIcon, ExternalLinkIcon, HeartIcon, SearchIcon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { CatalogLayoutToggle } from '@/components/catalog-layout-toggle'
-import { CreateMetricDialog } from '@/components/create-metric-dialog'
 import { DataTableCard } from '@/components/data-table-card'
 import { PageHeader } from '@/components/page-header'
 import { PaginationBar } from '@/components/pagination-bar'
@@ -21,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { IconHoverTip } from '@/components/ui/tooltip'
 import {
   Table,
   TableBody,
@@ -33,6 +33,7 @@ import { apiFetchJson, getClassicUiMetricsPageUrl } from '@/lib/api'
 import { formatDate } from '@/lib/format-date'
 import { useCatalogLayout } from '@/hooks/use-catalog-layout'
 import { useMetricFavorites } from '@/hooks/use-metric-favorites'
+import { buildDuplicateMetricLocationState, stashMetricDuplicateForNewPage } from '@/lib/new-metric-duplicate'
 import { parseSearchInput } from '@/lib/parse-search'
 import { cn } from '@/lib/utils'
 
@@ -81,6 +82,7 @@ export function MetricsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasNext, setHasNext] = useState(false)
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
 
   const [layout, setLayout] = useCatalogLayout(METRICS_LAYOUT_KEY)
 
@@ -150,6 +152,31 @@ export function MetricsPage() {
     setPage(1)
   }
 
+  const duplicateMetric = useCallback(
+    async (id: string) => {
+      if (!id) return
+      setDuplicatingId(id)
+      setError(null)
+      try {
+        const m = await apiFetchJson<Record<string, unknown>>(`/metrics/${encodeURIComponent(id)}`)
+        let sql = ''
+        try {
+          const r = await apiFetchJson<{ sql: string }>(`/metrics/${encodeURIComponent(id)}/sql`)
+          sql = r.sql ?? ''
+        } catch {
+          sql = ''
+        }
+        stashMetricDuplicateForNewPage(buildDuplicateMetricLocationState(m, sql))
+        void navigate('/metrics/new')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not load metric to duplicate.')
+      } finally {
+        setDuplicatingId(null)
+      }
+    },
+    [navigate],
+  )
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -157,14 +184,9 @@ export function MetricsPage() {
         title="Metrics"
         actions={
           <div className="flex flex-wrap gap-2">
-            <CreateMetricDialog
-              onCreated={(id) => navigate(`/metrics/${encodeURIComponent(id)}`)}
-              trigger={
-                <Button type="button" size="sm" className="rounded-xl">
-                  New metric
-                </Button>
-              }
-            />
+            <Button type="button" size="sm" className="rounded-xl" asChild>
+              <Link to="/metrics/new">New metric</Link>
+            </Button>
             {classicMetrics ? (
               <Button size="sm" variant="outline" className="gap-1.5 rounded-xl" asChild>
                 <a href={classicMetrics} target="_blank" rel="noreferrer" className="inline-flex items-center">
@@ -249,8 +271,8 @@ export function MetricsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border/60">
-                  <TableHead className="text-muted-foreground w-12 px-2 font-medium">
-                    <span className="sr-only">Favorite</span>
+                  <TableHead className="text-muted-foreground w-[4.5rem] px-2 font-medium">
+                    <span className="sr-only">Actions</span>
                   </TableHead>
                   <TableHead className="text-muted-foreground font-medium">
                     <Button variant="ghost" size="sm" className="-ml-2 h-8 rounded-lg font-medium" onClick={cycleNameSort}>
@@ -281,17 +303,43 @@ export function MetricsPage() {
                 ) : (
                   rows.map((r) => (
                     <TableRow key={r.metric_version_id || r.id} className="border-border/50">
-                      <TableCell className="w-12 px-2 align-top">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
-                          aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                          onClick={() => r.id && toggle(r.id)}
-                        >
-                          <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
-                        </Button>
+                      <TableCell className="w-[4.5rem] px-2 align-top">
+                        <div className="flex flex-col gap-1">
+                          <IconHoverTip
+                            title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                            caption={r.name}
+                            side="right"
+                          >
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
+                              aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                              onClick={() => r.id && toggle(r.id)}
+                            >
+                              <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                            </Button>
+                          </IconHoverTip>
+                          <IconHoverTip
+                            title="Duplicate metric"
+                            caption={`Open new metric with the same definition and SQL. Name stays blank. · ${r.name}`}
+                            side="right"
+                          >
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
+                              aria-label={`Duplicate metric: ${r.name}`}
+                              disabled={!r.id || duplicatingId === r.id}
+                              aria-busy={duplicatingId === r.id}
+                              onClick={() => r.id && void duplicateMetric(r.id)}
+                            >
+                              <CopyIcon className="size-4" />
+                            </Button>
+                          </IconHoverTip>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">
@@ -308,7 +356,7 @@ export function MetricsPage() {
                         <div className="flex flex-wrap gap-1">
                           {r.tags.length
                             ? r.tags.map((t) => (
-                                <Badge key={t} variant="secondary" className="font-normal">
+                                <Badge key={t} variant="tag" className="font-normal">
                                   {t}
                                 </Badge>
                               ))
@@ -345,20 +393,50 @@ export function MetricsPage() {
                       <CardTitle className="text-lg leading-snug">
                         <span className="text-foreground group-hover:text-primary transition-colors">{r.name}</span>
                       </CardTitle>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:text-primary pointer-events-auto shrink-0 rounded-lg"
-                        aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          if (r.id) toggle(r.id)
-                        }}
-                      >
-                        <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <IconHoverTip
+                          title="Duplicate metric"
+                          caption={`Same definition and SQL; enter a new name on the next page. · ${r.name}`}
+                          side="left"
+                        >
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-primary pointer-events-auto rounded-lg"
+                            aria-label={`Duplicate metric: ${r.name}`}
+                            disabled={!r.id || duplicatingId === r.id}
+                            aria-busy={duplicatingId === r.id}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (r.id) void duplicateMetric(r.id)
+                            }}
+                          >
+                            <CopyIcon className="size-4" />
+                          </Button>
+                        </IconHoverTip>
+                        <IconHoverTip
+                          title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                          caption={r.name}
+                          side="left"
+                        >
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-primary pointer-events-auto rounded-lg"
+                            aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (r.id) toggle(r.id)
+                            }}
+                          >
+                            <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                          </Button>
+                        </IconHoverTip>
+                      </div>
                     </div>
                     {r.description ? (
                       <p className="text-muted-foreground line-clamp-2 text-sm leading-relaxed">{r.description}</p>
@@ -369,7 +447,7 @@ export function MetricsPage() {
                     <div className="flex flex-wrap gap-1">
                       {r.tags.length
                         ? r.tags.map((t) => (
-                            <Badge key={t} variant="outline" className="font-normal">
+                            <Badge key={t} variant="tag" className="font-normal">
                               {t}
                             </Badge>
                           ))

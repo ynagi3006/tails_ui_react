@@ -7,6 +7,8 @@ import { AppShell } from '@/components/layout/AppShell'
 import { HomePage } from '@/pages/HomePage'
 import { MetricDetailPage } from '@/pages/MetricDetailPage'
 import { MetricsPage } from '@/pages/MetricsPage'
+import { NewMetricPage } from '@/pages/NewMetricPage'
+import { NewReportPage } from '@/pages/NewReportPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { ReportBuilderPage } from '@/pages/ReportBuilderPage'
 import { ReportsPage } from '@/pages/ReportsPage'
@@ -30,8 +32,10 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route index element={<HomePage />} />
               <Route path="metrics" element={<MetricsPage />} />
+              <Route path="metrics/new" element={<NewMetricPage />} />
               <Route path="metrics/:metricId" element={<MetricDetailPage />} />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="reports/new" element={<NewReportPage />} />
               <Route path="reports/:reportId" element={<ReportViewPage />} />
               <Route
                 path="explore"

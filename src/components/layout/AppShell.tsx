@@ -7,6 +7,7 @@ import { FeatureRequestFooterTrigger } from '@/components/feature-request-dialog
 import { ThemeMenu } from '@/components/theme-menu'
 import { getApiBaseUrl, getOktaRedirectUri } from '@/config/env'
 import { Button } from '@/components/ui/button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +41,7 @@ export function AppShell() {
   const okta = useOktaAuth()
 
   return (
+    <TooltipProvider>
     <div className="flex min-h-svh flex-col">
       <header className="bg-background/80 supports-backdrop-filter:bg-background/70 sticky top-0 z-50 border-b border-border/60 backdrop-blur-xl">
         <div className="mx-auto grid h-14 max-w-[min(100%,112rem)] grid-cols-[auto_1fr_auto] items-center gap-2 px-4 sm:gap-4 sm:px-6">
@@ -158,5 +160,6 @@ export function AppShell() {
       </footer>
       <AgentChatWidget />
     </div>
+    </TooltipProvider>
   )
 }

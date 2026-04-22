@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { HeartIcon, SearchIcon } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { CatalogLayoutToggle } from '@/components/catalog-layout-toggle'
-import { CreateReportDialog } from '@/components/create-report-dialog'
 import { DataTableCard } from '@/components/data-table-card'
 import { PageHeader } from '@/components/page-header'
 import { PaginationBar } from '@/components/pagination-bar'
@@ -21,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { IconHoverTip } from '@/components/ui/tooltip'
 import {
   Table,
   TableBody,
@@ -60,8 +60,14 @@ function mapRow(r: Record<string, unknown>): ReportRow {
   }
 }
 
+function reportStatusBadgeVariant(status: string): 'destructive' | 'success' | 'outline' {
+  const s = status.toLowerCase()
+  if (s === 'draft') return 'destructive'
+  if (s === 'published') return 'success'
+  return 'outline'
+}
+
 export function ReportsPage() {
-  const navigate = useNavigate()
   const { toggle, has } = useReportFavorites()
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
@@ -140,14 +146,9 @@ export function ReportsPage() {
         eyebrow="Catalog"
         title="All reports"
         actions={
-          <CreateReportDialog
-            onCreated={(id) => navigate(`/reports/${encodeURIComponent(id)}`)}
-            trigger={
-              <Button type="button" className="rounded-xl">
-                New report
-              </Button>
-            }
-          />
+          <Button type="button" className="rounded-xl" asChild>
+            <Link to="/reports/new">New report</Link>
+          </Button>
         }
       />
 
@@ -253,16 +254,22 @@ export function ReportsPage() {
                   rows.map((r) => (
                     <TableRow key={r.id} className="border-border/50">
                       <TableCell className="w-12 px-2 align-top">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
-                          aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                          onClick={() => r.id && toggle(r.id)}
+                        <IconHoverTip
+                          title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                          caption={r.name}
+                          side="right"
                         >
-                          <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
-                        </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-primary size-8 shrink-0 rounded-lg"
+                            aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                            onClick={() => r.id && toggle(r.id)}
+                          >
+                            <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                          </Button>
+                        </IconHoverTip>
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">
@@ -275,7 +282,7 @@ export function ReportsPage() {
                         ) : null}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="capitalize">
+                        <Badge variant={reportStatusBadgeVariant(r.status)} className="capitalize">
                           {r.status.toLowerCase()}
                         </Badge>
                       </TableCell>
@@ -283,7 +290,7 @@ export function ReportsPage() {
                         <div className="flex flex-wrap gap-1">
                           {r.tags.length
                             ? r.tags.map((t) => (
-                                <Badge key={t} variant="secondary" className="font-normal">
+                                <Badge key={t} variant="tag" className="font-normal">
                                   {t}
                                 </Badge>
                               ))
@@ -320,28 +327,34 @@ export function ReportsPage() {
                       <CardTitle className="text-lg leading-snug">
                         <span className="text-foreground group-hover:text-primary transition-colors">{r.name}</span>
                       </CardTitle>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:text-primary pointer-events-auto shrink-0 rounded-lg"
-                        aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          if (r.id) toggle(r.id)
-                        }}
+                      <IconHoverTip
+                        title={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        caption={r.name}
+                        side="left"
                       >
-                        <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
-                      </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-primary pointer-events-auto shrink-0 rounded-lg"
+                          aria-label={has(r.id) ? 'Remove from favorites' : 'Add to favorites'}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (r.id) toggle(r.id)
+                          }}
+                        >
+                          <HeartIcon className={cn('size-4', has(r.id) && 'fill-primary text-primary')} />
+                        </Button>
+                      </IconHoverTip>
                     </div>
-                    <Badge variant="outline" className="w-fit rounded-md capitalize font-normal">
+                    <Badge variant={reportStatusBadgeVariant(r.status)} className="w-fit rounded-md capitalize font-normal">
                       {r.status.toLowerCase()}
                     </Badge>
                     <div className="flex flex-wrap gap-1">
                       {r.tags.length
                         ? r.tags.map((t) => (
-                            <Badge key={t} variant="secondary" className="font-normal">
+                            <Badge key={t} variant="tag" className="font-normal">
                               {t}
                             </Badge>
                           ))
