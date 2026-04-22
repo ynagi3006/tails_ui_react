@@ -41,25 +41,39 @@ function applyPrincipalPayload(ok: boolean, data: unknown, setIsAdmin: (v: boole
 }
 
 export function useTailsPrincipal() {
+  const uiAuthOff = isUiAuthDisabled()
   const [isAdmin, setIsAdmin] = useState(() =>
-    typeof window !== 'undefined' ? isUiAuthDisabled() : false,
+    typeof window !== 'undefined' ? uiAuthOff : false,
+  )
+  /** False until the first principal fetch finishes (or UI auth is disabled). Avoids flashing non-admin UI. */
+  const [principalReady, setPrincipalReady] = useState(() =>
+    typeof window !== 'undefined' ? uiAuthOff : false,
   )
 
   const refreshPrincipal = useCallback(async () => {
     const { ok, data } = await fetchPrincipalJson()
     applyPrincipalPayload(ok, data, setIsAdmin)
+    setPrincipalReady(true)
   }, [])
 
   useEffect(() => {
+    if (uiAuthOff) {
+      setIsAdmin(true)
+      setPrincipalReady(true)
+      return
+    }
     let cancelled = false
     void (async () => {
       const { ok, data } = await fetchPrincipalJson()
-      if (!cancelled) applyPrincipalPayload(ok, data, setIsAdmin)
+      if (!cancelled) {
+        applyPrincipalPayload(ok, data, setIsAdmin)
+        setPrincipalReady(true)
+      }
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [uiAuthOff])
 
   useEffect(() => {
     const onAuthChanged = () => {
@@ -71,5 +85,5 @@ export function useTailsPrincipal() {
     }
   }, [refreshPrincipal])
 
-  return { isAdmin, refreshPrincipal }
+  return { isAdmin, principalReady, refreshPrincipal }
 }

@@ -9,7 +9,7 @@ import { MetricDetailPage } from '@/pages/MetricDetailPage'
 import { MetricsPage } from '@/pages/MetricsPage'
 import { NewMetricPage } from '@/pages/NewMetricPage'
 import { NewReportPage } from '@/pages/NewReportPage'
-import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { AdminPage } from '@/pages/AdminPage'
 import { ReportBuilderPage } from '@/pages/ReportBuilderPage'
 import { ReportsPage } from '@/pages/ReportsPage'
 import { LoginCallbackPage } from '@/pages/LoginCallbackPage'
@@ -52,7 +52,7 @@ export default function App() {
                 }
               />
               <Route path="report-builder" element={<ReportBuilderPage />} />
-              <Route path="admin" element={<PlaceholderPage title="Admin" />} />
+              <Route path="admin" element={<AdminPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Route>
